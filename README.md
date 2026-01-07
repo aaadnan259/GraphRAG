@@ -1,61 +1,42 @@
 # GraphRAG Engine
 
-A production-grade, enterprise-ready Graph Retrieval-Augmented Generation (GraphRAG) system built with security, scalability, and performance in mind.
+A Graph Retrieval-Augmented Generation (GraphRAG) system combining Neo4j for knowledge graphs and ChromaDB for vector search.
 
 ## Overview
 
-GraphRAG Engine ingests unstructured text documents, extracts structured knowledge (Entities & Relationships) into Neo4j, indexes text chunks into ChromaDB, and performs hybrid retrieval (Vector + Graph) to answer user questions with high accuracy.
+Ingests text, extracts entities/relationships using Gemini, and allows for hybrid (Vector + Graph) Q&A.
 
 ## Features
 
-- **Hybrid Retrieval**: Combines vector similarity search with knowledge graph traversal
-- **Async Processing**: Parallel LLM calls for fast document ingestion
-- **Role-Based Access Control**: Separate read-write and read-only database credentials
-- **Schema Validation**: Strict Pydantic models enforce canonical relationship types
-- **Fault Tolerance**: Automatic retries with exponential backoff
-- **Web Interface**: Streamlit-based UI for document ingestion and Q&A
-- **Graph Visualization**: Interactive knowledge graph visualization
+- **Hybrid Retrieval**: Vector similarity + Graph traversal.
+- **Async Ingestion**: Parallel processing for faster indexing.
+- **Security**: Read-only users for retrieval operations.
+- **Graph Visualization**: Built-in visual explorer.
+- **Strict Schema**: Pydantic models to keep graph data clean.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Streamlit Frontend                       │
-│                         (app.py)                            │
-└─────────────────────┬───────────────────┬───────────────────┘
-                      │                   │
-         ┌────────────▼─────────┐  ┌─────▼──────────────────┐
-         │  Ingestion Pipeline  │  │  Retrieval Engine      │
-         │     (ingest.py)      │  │    (retriever.py)      │
-         │   Uses RW Creds      │  │   Uses RO Creds        │
-         └────────┬─────────────┘  └────────┬───────────────┘
-                  │                         │
-    ┌─────────────▼─────────────────────────▼────────────────┐
-    │              Database Layer (database.py)              │
-    │    ┌────────────────────┐  ┌────────────────────────┐ │
-    │    │  Neo4j (Graph DB)  │  │  ChromaDB (Vector DB)  │ │
-    │    │  - RW Connection   │  │  - Embeddings          │ │
-    │    │  - RO Connection   │  │  - Similarity Search   │ │
-    │    └────────────────────┘  └────────────────────────┘ │
-    └──────────────────────────────────────────────────────────┘
+Front End (Streamlit)
+      |
+      v
++-------------+      +--------------+
+| Ingestor    |      | Retriever    |
+| (RW Access) |      | (RO Access)  |
++------+------+      +-------+------+
+       |                     |
+       v                     v
++-----------------------------------+
+|          Database Layer           |
+|  [Neo4j (Graph)] [Chroma (Vec)]   |
++-----------------------------------+
 ```
 
-## Security Architecture
+## Security & Validation
 
-### Zero-Trust Input Validation
-- All user input is sanitized using regex filters
-- Pydantic validators enforce data integrity
-- Maximum length constraints prevent injection attacks
-
-### Role-Based Access Control (RBAC)
-- **Ingestion Pipeline**: Uses `NEO4J_RW_USER` with write privileges
-- **Retrieval Engine**: Uses `NEO4J_RO_USER` with read-only privileges
-- Database enforces permissions at protocol level
-
-### Relationship Schema Enforcement
-- Canonical relationship types (e.g., `WORKS_AT`, `LOCATED_IN`, `PART_OF`)
-- Automatic normalization of LLM-generated relationships
-- Prevents graph pollution with inconsistent relationships
+- Input sanitization (regex)
+- Read-only tokens for the query engine
+- Canonical relationship types (WORKS_AT, LOCATED_IN, etc.)
 
 ## Installation
 

@@ -1,7 +1,5 @@
 """
-Configuration Management Module
-Validates and exposes all environment variables required for the GraphRAG system.
-Fails fast on startup if any required configuration is missing.
+Environment configuration and validation.
 """
 
 import os

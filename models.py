@@ -1,6 +1,5 @@
 """
-Data Models Module
-Pydantic schemas for strict type validation and relationship schema enforcement.
+Data models and validation schemas.
 """
 
 from typing import List, Optional

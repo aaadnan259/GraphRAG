@@ -8,7 +8,7 @@ import asyncio
 from unittest.mock import Mock, MagicMock, AsyncMock, patch, call
 from collections import defaultdict
 
-from ingest import IngestionPipeline
+from ingest import Ingestor
 from models import Entity, Relationship, KnowledgeGraph
 
 
@@ -20,56 +20,56 @@ class TestTextChunking:
         """Create ingestion pipeline with mocked dependencies."""
         with patch('ingest.get_write_graph', return_value=mock_neo4j_driver), \
              patch('ingest.get_vectorstore', return_value=mock_vectorstore), \
-             patch('ingest.ChatOpenAI'):
-            pipeline = IngestionPipeline()
+             patch('ingest.ChatGoogleGenerativeAI'):
+            pipeline = Ingestor()
             return pipeline
 
     def test_chunk_normal_text(self, pipeline):
         """Test chunking of normal text."""
         text = "This is a test. " * 100
-        chunks = pipeline.text_splitter.split_text(text)
+        chunks = pipeline.splitter.split_text(text)
         assert len(chunks) > 0
         assert all(isinstance(chunk, str) for chunk in chunks)
 
     def test_chunk_empty_string(self, pipeline, edge_case_texts):
         """Test chunking empty string."""
-        chunks = pipeline.text_splitter.split_text(edge_case_texts["empty"])
+        chunks = pipeline.splitter.split_text(edge_case_texts["empty"])
         assert chunks == []
 
     def test_chunk_whitespace_only(self, pipeline, edge_case_texts):
         """Test chunking whitespace-only text."""
-        chunks = pipeline.text_splitter.split_text(edge_case_texts["whitespace_only"])
+        chunks = pipeline.splitter.split_text(edge_case_texts["whitespace_only"])
         # Should return empty or minimal chunks
         assert len(chunks) <= 1
 
     def test_chunk_single_char(self, pipeline, edge_case_texts):
         """Test chunking single character."""
-        chunks = pipeline.text_splitter.split_text(edge_case_texts["single_char"])
+        chunks = pipeline.splitter.split_text(edge_case_texts["single_char"])
         assert len(chunks) == 1
         assert chunks[0] == "a"
 
     def test_chunk_no_spaces(self, pipeline, edge_case_texts):
         """Test chunking text with no spaces (massive single line)."""
-        chunks = pipeline.text_splitter.split_text(edge_case_texts["no_spaces"])
+        chunks = pipeline.splitter.split_text(edge_case_texts["no_spaces"])
         # Should still create chunks, even without natural breaks
         assert len(chunks) >= 1
 
     def test_chunk_massive_line(self, pipeline, edge_case_texts):
         """Test chunking massive single line with spaces."""
-        chunks = pipeline.text_splitter.split_text(edge_case_texts["massive_line"])
+        chunks = pipeline.splitter.split_text(edge_case_texts["massive_line"])
         # Should split into multiple chunks
         assert len(chunks) > 1
 
     def test_chunk_markdown_headers(self, pipeline, edge_case_texts):
         """Test chunking markdown with headers."""
-        chunks = pipeline.text_splitter.split_text(edge_case_texts["markdown_headers"])
+        chunks = pipeline.splitter.split_text(edge_case_texts["markdown_headers"])
         assert len(chunks) >= 1
         # Headers should be preserved in chunks
         assert any("#" in chunk for chunk in chunks)
 
     def test_chunk_unicode(self, pipeline, edge_case_texts):
         """Test chunking text with special unicode."""
-        chunks = pipeline.text_splitter.split_text(edge_case_texts["special_unicode"])
+        chunks = pipeline.splitter.split_text(edge_case_texts["special_unicode"])
         assert len(chunks) == 1
         assert "世界" in chunks[0]
         assert "🌍" in chunks[0]
@@ -77,7 +77,7 @@ class TestTextChunking:
     def test_chunk_overlap(self, pipeline):
         """Test that chunk overlap is maintained."""
         text = "Sentence one. Sentence two. Sentence three. " * 50
-        chunks = pipeline.text_splitter.split_text(text)
+        chunks = pipeline.splitter.split_text(text)
 
         if len(chunks) > 1:
             # Check that there's some overlap between consecutive chunks
@@ -93,13 +93,13 @@ class TestKnowledgeExtraction:
         """Create ingestion pipeline with mocked dependencies."""
         with patch('ingest.get_write_graph', return_value=mock_neo4j_driver), \
              patch('ingest.get_vectorstore', return_value=mock_vectorstore), \
-             patch('ingest.ChatOpenAI') as mock_openai:
+             patch('ingest.ChatGoogleGenerativeAI') as mock_openai:
 
             # Mock the LLM
             mock_llm = AsyncMock()
             mock_openai.return_value = mock_llm
 
-            pipeline = IngestionPipeline()
+            pipeline = Ingestor()
             pipeline.llm = mock_llm
 
             return pipeline
@@ -122,7 +122,7 @@ class TestKnowledgeExtraction:
 
         pipeline.llm.ainvoke = AsyncMock(return_value=mock_response)
 
-        result = await pipeline._extract_knowledge_from_chunk("Test text", 0)
+        result = await pipeline._process_chunk("Test text", 0)
 
         assert result is not None
         assert len(result.entities) == 1
@@ -138,7 +138,7 @@ class TestKnowledgeExtraction:
 
         pipeline.llm.ainvoke = AsyncMock(return_value=mock_response)
 
-        result = await pipeline._extract_knowledge_from_chunk("Test text", 0)
+        result = await pipeline._process_chunk("Test text", 0)
 
         # Should return None on JSON parse error
         assert result is None
@@ -151,7 +151,7 @@ class TestKnowledgeExtraction:
 
         pipeline.llm.ainvoke = AsyncMock(return_value=mock_response)
 
-        result = await pipeline._extract_knowledge_from_chunk("Test text", 0)
+        result = await pipeline._process_chunk("Test text", 0)
 
         assert result is not None
         assert len(result.entities) == 0
@@ -167,7 +167,7 @@ class TestKnowledgeExtraction:
         mock_response.content = '{"entities": [{"name": "Test", "type": "PERSON"}], "relationships": []}'
         pipeline.llm.ainvoke = AsyncMock(return_value=mock_response)
 
-        results = await pipeline._extract_knowledge_parallel(chunks)
+        results = await pipeline._run_parallel(chunks)
 
         # Should extract from all chunks
         assert len(results) == 3
@@ -181,9 +181,9 @@ class TestBatchWrites:
         """Create ingestion pipeline with mocked dependencies."""
         with patch('ingest.get_write_graph', return_value=mock_neo4j_driver), \
              patch('ingest.get_vectorstore', return_value=mock_vectorstore), \
-             patch('ingest.ChatOpenAI'):
+             patch('ingest.ChatGoogleGenerativeAI'):
 
-            pipeline = IngestionPipeline()
+            pipeline = Ingestor()
             return pipeline
 
     def test_batch_write_single_knowledge_graph(self, pipeline, mock_neo4j_driver):
@@ -198,7 +198,7 @@ class TestBatchWrites:
 
         kg = KnowledgeGraph(entities=entities, relationships=relationships)
 
-        pipeline._write_to_neo4j([kg])
+        pipeline._save_graph([kg])
 
         # Get the session mock
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
@@ -232,7 +232,7 @@ class TestBatchWrites:
             relationships=[Relationship(source="Eve", target="Frank", relation_type="WORKS_AT")]
         )
 
-        pipeline._write_to_neo4j([kg1, kg2, kg3])
+        pipeline._save_graph([kg1, kg2, kg3])
 
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
 
@@ -248,7 +248,7 @@ class TestBatchWrites:
         """Test batch write with empty knowledge graphs."""
         kg = KnowledgeGraph(entities=[], relationships=[])
 
-        pipeline._write_to_neo4j([kg])
+        pipeline._save_graph([kg])
 
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
 
@@ -268,7 +268,7 @@ class TestBatchWrites:
             relationships=relationships
         )
 
-        pipeline._write_to_neo4j([kg])
+        pipeline._save_graph([kg])
 
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
 
@@ -286,12 +286,12 @@ class TestRetryMechanism:
         """Create ingestion pipeline with mocked dependencies."""
         with patch('ingest.get_write_graph', return_value=mock_neo4j_driver), \
              patch('ingest.get_vectorstore', return_value=mock_vectorstore), \
-             patch('ingest.ChatOpenAI') as mock_openai:
+             patch('ingest.ChatGoogleGenerativeAI') as mock_openai:
 
             mock_llm = AsyncMock()
             mock_openai.return_value = mock_llm
 
-            pipeline = IngestionPipeline()
+            pipeline = Ingestor()
             pipeline.llm = mock_llm
 
             return pipeline
@@ -313,7 +313,7 @@ class TestRetryMechanism:
 
         pipeline.llm.ainvoke = AsyncMock(side_effect=failing_then_succeeding)
 
-        result = await pipeline._extract_knowledge_from_chunk("Test text", 0)
+        result = await pipeline._process_chunk("Test text", 0)
 
         # Should succeed after retry
         assert result is not None
@@ -325,7 +325,7 @@ class TestRetryMechanism:
         pipeline.llm.ainvoke = AsyncMock(side_effect=Exception("Persistent error"))
 
         with pytest.raises(Exception):
-            await pipeline._extract_knowledge_from_chunk("Test text", 0)
+            await pipeline._process_chunk("Test text", 0)
 
 
 class TestVectorStoreWrites:
@@ -336,9 +336,9 @@ class TestVectorStoreWrites:
         """Create ingestion pipeline with mocked dependencies."""
         with patch('ingest.get_write_graph', return_value=mock_neo4j_driver), \
              patch('ingest.get_vectorstore', return_value=mock_vectorstore), \
-             patch('ingest.ChatOpenAI'):
+             patch('ingest.ChatGoogleGenerativeAI'):
 
-            pipeline = IngestionPipeline()
+            pipeline = Ingestor()
             return pipeline
 
     def test_write_chunks_to_vectorstore(self, pipeline, mock_vectorstore):
@@ -347,7 +347,7 @@ class TestVectorStoreWrites:
         document_id = "doc-123"
         filename = "test.txt"
 
-        pipeline._write_to_vectorstore(chunks, document_id, filename)
+        pipeline._save_vectors(chunks, document_id, filename)
 
         # Verify add_documents was called
         assert mock_vectorstore.add_documents.called
@@ -363,7 +363,7 @@ class TestVectorStoreWrites:
         document_id = "doc-456"
         filename = "sample.txt"
 
-        pipeline._write_to_vectorstore(chunks, document_id, filename)
+        pipeline._save_vectors(chunks, document_id, filename)
 
         call_args = mock_vectorstore.add_documents.call_args
         documents = call_args[0][0]
@@ -383,7 +383,7 @@ class TestFullIngestionPipeline:
         """Create fully mocked pipeline."""
         with patch('ingest.get_write_graph', return_value=mock_neo4j_driver), \
              patch('ingest.get_vectorstore', return_value=mock_vectorstore), \
-             patch('ingest.ChatOpenAI') as mock_openai:
+             patch('ingest.ChatGoogleGenerativeAI') as mock_openai:
 
             mock_llm = AsyncMock()
             mock_response = Mock()
@@ -396,7 +396,7 @@ class TestFullIngestionPipeline:
             mock_llm.ainvoke = AsyncMock(return_value=mock_response)
             mock_openai.return_value = mock_llm
 
-            pipeline = IngestionPipeline()
+            pipeline = Ingestor()
             return pipeline
 
     @pytest.mark.asyncio
@@ -405,7 +405,7 @@ class TestFullIngestionPipeline:
         text = "OpenAI created GPT-4, a large language model."
         filename = "test.txt"
 
-        result = await pipeline.ingest_document(text, filename)
+        result = await pipeline.ingest(text, filename)
 
         assert result["success"] is True
         assert "document_id" in result
@@ -418,7 +418,7 @@ class TestFullIngestionPipeline:
         text = ""
         filename = "empty.txt"
 
-        result = await pipeline.ingest_document(text, filename)
+        result = await pipeline.ingest(text, filename)
 
         assert result["success"] is False
         assert "error" in result

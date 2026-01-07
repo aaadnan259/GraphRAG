@@ -19,7 +19,7 @@ class TestReadOnlyAccess:
         """Create retriever with mocked dependencies."""
         with patch('retriever.get_read_graph', return_value=mock_neo4j_driver) as mock_read, \
              patch('retriever.get_vectorstore', return_value=mock_vectorstore), \
-             patch('retriever.ChatOpenAI'):
+             patch('retriever.ChatGoogleGenerativeAI'):
 
             retriever = HybridRetriever()
             # Store the mock for verification
@@ -62,7 +62,7 @@ class TestCypherInjectionProtection:
         """Create retriever with mocked dependencies."""
         with patch('retriever.get_read_graph', return_value=mock_neo4j_driver), \
              patch('retriever.get_vectorstore', return_value=mock_vectorstore), \
-             patch('retriever.ChatOpenAI'), \
+             patch('retriever.ChatGoogleGenerativeAI'), \
              patch('retriever.Neo4jGraph', return_value=mock_neo4j_graph):
 
             retriever = HybridRetriever()
@@ -118,7 +118,7 @@ class TestVectorSearch:
         """Create retriever with mocked dependencies."""
         with patch('retriever.get_read_graph', return_value=mock_neo4j_driver), \
              patch('retriever.get_vectorstore', return_value=mock_vectorstore), \
-             patch('retriever.ChatOpenAI'):
+             patch('retriever.ChatGoogleGenerativeAI'):
 
             retriever = HybridRetriever()
             return retriever
@@ -159,7 +159,7 @@ class TestGraphSearch:
         """Create retriever with mocked dependencies."""
         with patch('retriever.get_read_graph', return_value=mock_neo4j_driver), \
              patch('retriever.get_vectorstore', return_value=mock_vectorstore), \
-             patch('retriever.ChatOpenAI'), \
+             patch('retriever.ChatGoogleGenerativeAI'), \
              patch('retriever.Neo4jGraph', return_value=mock_neo4j_graph):
 
             retriever = HybridRetriever()
@@ -208,7 +208,7 @@ class TestGracefulDegradation:
         """Create retriever with mocked dependencies."""
         with patch('retriever.get_read_graph', return_value=mock_neo4j_driver), \
              patch('retriever.get_vectorstore', return_value=mock_vectorstore), \
-             patch('retriever.ChatOpenAI') as mock_openai:
+             patch('retriever.ChatGoogleGenerativeAI') as mock_openai:
 
             mock_llm = AsyncMock()
             mock_response = Mock()
@@ -305,7 +305,7 @@ class TestGraphStatistics:
         """Create retriever with mocked dependencies."""
         with patch('retriever.get_read_graph', return_value=mock_neo4j_driver), \
              patch('retriever.get_vectorstore', return_value=mock_vectorstore), \
-             patch('retriever.ChatOpenAI'):
+             patch('retriever.ChatGoogleGenerativeAI'):
 
             retriever = HybridRetriever()
             return retriever
@@ -356,7 +356,7 @@ class TestEntitySearch:
         """Create retriever with mocked dependencies."""
         with patch('retriever.get_read_graph', return_value=mock_neo4j_driver), \
              patch('retriever.get_vectorstore', return_value=mock_vectorstore), \
-             patch('retriever.ChatOpenAI'):
+             patch('retriever.ChatGoogleGenerativeAI'):
 
             retriever = HybridRetriever()
             return retriever
@@ -404,7 +404,7 @@ class TestConvenienceFunction:
         """Test the convenience query function."""
         with patch('retriever.get_read_graph', return_value=mock_neo4j_driver), \
              patch('retriever.get_vectorstore', return_value=mock_vectorstore), \
-             patch('retriever.ChatOpenAI') as mock_openai, \
+             patch('retriever.ChatGoogleGenerativeAI') as mock_openai, \
              patch('retriever.HybridRetriever.retrieve') as mock_retrieve:
 
             mock_response = QueryResponse(

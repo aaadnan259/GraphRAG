@@ -1,7 +1,5 @@
 """
-Database Layer Module
-Manages connections to Neo4j (Graph DB) and ChromaDB (Vector DB).
-Implements singleton pattern for connection management with separate RW/RO credentials.
+Neo4j and ChromaDB connection management.
 """
 
 import logging

@@ -2,7 +2,7 @@
 import asyncio
 from config import config
 from database import get_write_graph, get_read_graph
-from ingest import IngestionPipeline
+from ingest import Ingestor
 from retriever import HybridRetriever
 
 print("="*60)
@@ -26,7 +26,7 @@ print("  [OK] Neo4j READ connection")
 
 # Test 3: Ingestion pipeline init
 print("\n[3/5] Testing ingestion pipeline initialization...")
-pipeline = IngestionPipeline()
+ingestor = Ingestor()
 print("  [OK] Ingestion pipeline initialized")
 
 # Test 4: Retriever init
@@ -45,7 +45,7 @@ text documents using the Gemini API.
 """
 
 async def test_ingestion():
-    result = await pipeline.ingest_document(test_doc, "test_doc.txt")
+    result = await ingestor.ingest(test_doc, "test_doc.txt")
     return result
 
 result = asyncio.run(test_ingestion())

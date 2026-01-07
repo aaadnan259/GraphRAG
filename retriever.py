@@ -1,6 +1,5 @@
 """
-Retrieval Engine Module
-Handles read-only hybrid retrieval (Vector + Graph) using RO credentials.
+Hybrid retrieval logic (Vector + Graph).
 """
 
 import asyncio
