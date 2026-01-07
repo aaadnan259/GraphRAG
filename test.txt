@@ -1,0 +1,11 @@
+# Professional Profile: Adnan Ashraf
+
+Adnan Ashraf is an AI Engineer based in Perrysburg, Ohio. He graduated from the University of Toledo with a degree in Computer Science.
+
+## Key Projects
+Adnan created the "EchoBot" project, which is a Generative AI assistant. EchoBot utilizes LangChain for orchestration and runs on the Render cloud platform.
+
+He also developed "IntelliStock," an inventory management system powered by Python and Django. This system uses PostgreSQL for data storage.
+
+## Recent Work
+Adnan previously worked at Code Echo as a Software Engineering Intern. Code Echo is located in Toledo, Ohio. During his time there, he built microservices for clients like "Rocky Ridge Development."
