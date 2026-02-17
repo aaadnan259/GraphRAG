@@ -112,24 +112,27 @@ class Ingestor:
     def _save_graph(self, kgs: List[KnowledgeGraph]) -> None:
         logger.info("Writing to Neo4j...")
         
-        ents = []
+        ent_map = {}
         for kg in kgs:
             for e in kg.entities:
-                ents.append({
+                ent_map[e.name] = {
                     "name": e.name, 
                     "type": e.type, 
                     "description": e.description or ""
-                })
+                }
+        ents = list(ent_map.values())
 
-        rels = []
+        rel_map = {}
         for kg in kgs:
             for r in kg.relationships:
-                rels.append({
+                key = (r.source, r.relation_type, r.target)
+                rel_map[key] = {
                     "source": r.source,
                     "target": r.target,
                     "relation_type": r.relation_type,
                     "description": r.description or ""
-                })
+                }
+        rels = list(rel_map.values())
 
         with self.driver.session() as session:
             if ents:
