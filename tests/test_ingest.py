@@ -277,6 +277,37 @@ class TestBatchWrites:
         call_count = session.run.call_count
         assert call_count == 3  # 1 entities + 2 relationship types
 
+    def test_save_graph_deduplicates_entities(self, pipeline, mock_neo4j_driver):
+        """Test that entities with the same name are deduplicated before saving."""
+        # Create two knowledge graphs with the same entity
+        kg1 = KnowledgeGraph(
+            entities=[Entity(name="CommonEntity", type="PERSON", description="Desc 1")],
+            relationships=[]
+        )
+        kg2 = KnowledgeGraph(
+            entities=[Entity(name="CommonEntity", type="PERSON", description="Desc 2")],
+            relationships=[]
+        )
+
+        pipeline._save_graph([kg1, kg2])
+
+        session = mock_neo4j_driver.session.return_value.__enter__.return_value
+
+        # Find the call to session.run that handles entities
+        entity_calls = []
+        for call_args in session.run.call_args_list:
+            # call_args is (args, kwargs)
+            kwargs = call_args[1]
+            if 'entities' in kwargs:
+                entity_calls.append(kwargs['entities'])
+
+        assert len(entity_calls) == 1, "Should have exactly one batch write for entities"
+
+        entities_batch = entity_calls[0]
+        # Current implementation sends both (len=2). Optimized should send one (len=1).
+        assert len(entities_batch) == 1, f"Expected 1 unique entity, but got {len(entities_batch)}"
+        assert entities_batch[0]['name'] == "CommonEntity"
+
 
 class TestRetryMechanism:
     """Test retry logic with tenacity."""

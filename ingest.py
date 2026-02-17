@@ -112,14 +112,15 @@ class Ingestor:
     def _save_graph(self, kgs: List[KnowledgeGraph]) -> None:
         logger.info("Writing to Neo4j...")
         
-        ents = []
+        ents = {}
         for kg in kgs:
             for e in kg.entities:
-                ents.append({
+                ents[e.name] = {
                     "name": e.name, 
                     "type": e.type, 
                     "description": e.description or ""
-                })
+                }
+        ents = list(ents.values())
 
         rels = []
         for kg in kgs:
