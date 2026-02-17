@@ -110,7 +110,7 @@ class HybridRetriever:
             return contexts
 
         except Exception as e:
-            logger.error(f"Vector search error: {e}")
+            logger.exception("Vector search error")
             raise
 
     def _graph_search_sync(self, query: str) -> str:
@@ -144,8 +144,8 @@ class HybridRetriever:
             return graph_context
 
         except Exception as e:
-            logger.error(f"Graph search error: {e}")
-            return f"Graph search unavailable: {str(e)}"
+            logger.exception("Graph search error")
+            return "Graph search unavailable due to an internal error."
 
     @retry(
         stop=stop_after_attempt(3),
@@ -236,13 +236,13 @@ class HybridRetriever:
             if request.use_vector_search:
                 vector_context = self._vector_search(request.query)
         except Exception as e:
-            logger.error(f"Vector search failed: {e}")
+            logger.exception("Vector search failed")
 
         try:
             if request.use_graph_search:
                 graph_context = await self._graph_search(request.query)
         except Exception as e:
-            logger.error(f"Graph search failed: {e}")
+            logger.exception("Graph search failed")
 
         if not vector_context and not graph_context:
             return QueryResponse(
@@ -295,9 +295,9 @@ class HybridRetriever:
                 }
 
         except Exception as e:
-            logger.error(f"Error fetching graph statistics: {e}")
+            logger.exception("Error fetching graph statistics")
             return {
-                "error": str(e),
+                "error": "An internal error occurred while fetching graph statistics.",
                 "total_entities": 0,
                 "total_relationships": 0,
                 "entity_types": {},
@@ -337,7 +337,7 @@ class HybridRetriever:
                 return entities
 
         except Exception as e:
-            logger.error(f"Error searching entities: {e}")
+            logger.exception("Error searching entities")
             return []
 
 
