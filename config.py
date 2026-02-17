@@ -142,5 +142,10 @@ class Config:
         """Number of vector search results to retrieve."""
         return int(self._get_optional_env("VECTOR_SEARCH_K", "5"))
 
+    @property
+    def max_file_size(self) -> int:
+        """Maximum allowed file upload size in bytes (default 10MB)."""
+        return int(self._get_optional_env("MAX_FILE_SIZE", str(10 * 1024 * 1024)))
+
 
 config = Config()
