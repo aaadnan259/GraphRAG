@@ -2,9 +2,6 @@
 import subprocess
 import sys
 import os
-import time
-import shutil
-import threading
 from pathlib import Path
 
 # Configuration
