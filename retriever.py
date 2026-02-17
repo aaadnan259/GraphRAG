@@ -269,8 +269,8 @@ class HybridRetriever:
             sources=sources,
         )
 
-    def get_graph_statistics(self) -> Dict[str, Any]:
-        """Get statistics about the knowledge graph (READ-ONLY operation)."""
+    def _get_graph_statistics_sync(self) -> Dict[str, Any]:
+        """Synchronous implementation of graph statistics retrieval."""
         logger.info("Fetching graph statistics...")
 
         try:
@@ -304,9 +304,17 @@ class HybridRetriever:
                 "relationship_types": {},
             }
 
-    def search_entities(self, name_pattern: str, limit: int = 10) -> List[Dict[str, Any]]:
+    async def get_graph_statistics(self) -> Dict[str, Any]:
         """
-        Search for entities by name pattern (READ-ONLY operation).
+        Get statistics about the knowledge graph (READ-ONLY operation).
+        Offloads blocking DB operations to thread pool executor.
+        """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._get_graph_statistics_sync)
+
+    def _search_entities_sync(self, name_pattern: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Synchronous implementation of entity search.
 
         Args:
             name_pattern: Pattern to match entity names
@@ -339,6 +347,21 @@ class HybridRetriever:
         except Exception as e:
             logger.error(f"Error searching entities: {e}")
             return []
+
+    async def search_entities(self, name_pattern: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Search for entities by name pattern (READ-ONLY operation).
+        Offloads blocking DB operations to thread pool executor.
+
+        Args:
+            name_pattern: Pattern to match entity names
+            limit: Maximum number of results
+
+        Returns:
+            List of matching entities
+        """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._search_entities_sync, name_pattern, limit)
 
 
 async def query_graphrag(query: str, use_vector: bool = True, use_graph: bool = True) -> QueryResponse:
