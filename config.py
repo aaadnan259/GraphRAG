@@ -3,7 +3,7 @@ Environment configuration and validation.
 """
 
 import os
-from typing import Optional
+from typing import Optional, List
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -141,6 +141,20 @@ class Config:
     def vector_search_k(self) -> int:
         """Number of vector search results to retrieve."""
         return int(self._get_optional_env("VECTOR_SEARCH_K", "5"))
+
+    @property
+    def allowed_origins(self) -> List[str]:
+        """Allowed CORS origins."""
+        origins = self._get_optional_env("ALLOWED_ORIGINS", "")
+        if origins:
+            return [origin.strip() for origin in origins.split(",")]
+        # Default to localhost origins if not set
+        return [
+            "http://localhost:5173",  # Vite Dev Server
+            "http://localhost:3000",  # Fallback React port
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:3000",
+        ]
 
 
 config = Config()
