@@ -3,7 +3,7 @@ Environment configuration and validation.
 """
 
 import os
-from typing import Optional
+from typing import Optional, List
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -146,6 +146,20 @@ class Config:
     def max_file_size(self) -> int:
         """Maximum allowed file upload size in bytes (default 10MB)."""
         return int(self._get_optional_env("MAX_FILE_SIZE", str(10 * 1024 * 1024)))
+
+    @property
+    def allowed_origins(self) -> List[str]:
+        """Allowed CORS origins."""
+        origins = self._get_optional_env("ALLOWED_ORIGINS", "")
+        if origins:
+            return [origin.strip() for origin in origins.split(",")]
+        # Default to localhost origins if not set
+        return [
+            "http://localhost:5173",  # Vite Dev Server
+            "http://localhost:3000",  # Fallback React port
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:3000",
+        ]
 
 
 config = Config()
