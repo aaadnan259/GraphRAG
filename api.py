@@ -66,7 +66,24 @@ async def ingest_document(file: UploadFile = File(...)):
         if not file.filename.endswith((".txt", ".md")):
              raise HTTPException(status_code=400, detail="Only .txt and .md files are supported")
 
-        content = await file.read()
+        # Read file in chunks to prevent memory exhaustion
+        content_chunks = []
+        total_size = 0
+        CHUNK_SIZE = 1024 * 1024  # 1MB
+
+        while True:
+            chunk = await file.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            total_size += len(chunk)
+            if total_size > config.max_file_size:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large. Maximum size is {config.max_file_size} bytes"
+                )
+            content_chunks.append(chunk)
+
+        content = b"".join(content_chunks)
         text = content.decode("utf-8")
 
         ingestor = Ingestor()

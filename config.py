@@ -143,6 +143,11 @@ class Config:
         return int(self._get_optional_env("VECTOR_SEARCH_K", "5"))
 
     @property
+    def max_file_size(self) -> int:
+        """Maximum allowed file upload size in bytes (default 10MB)."""
+        return int(self._get_optional_env("MAX_FILE_SIZE", str(10 * 1024 * 1024)))
+
+    @property
     def allowed_origins(self) -> List[str]:
         """Allowed CORS origins."""
         origins = self._get_optional_env("ALLOWED_ORIGINS", "")

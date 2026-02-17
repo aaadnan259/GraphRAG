@@ -124,5 +124,22 @@ class TestConfig(unittest.TestCase):
             origins = global_config.allowed_origins
             self.assertEqual(origins, ["http://foo.com", "http://bar.com"])
 
+    def test_max_file_size_default(self):
+        """Test default max file size."""
+        with patch.dict(os.environ, self.required_env, clear=True):
+            config = Config()
+            self.assertEqual(config.max_file_size, 10 * 1024 * 1024)
+
+    def test_max_file_size_override(self):
+        """Test max file size override via environment variable."""
+        with patch.dict(os.environ, {"MAX_FILE_SIZE": "5242880"}, clear=True):
+             # We need to re-instantiate or patch because Config() reads env during init/property access
+             # The property reads env var dynamically, so patch.dict is enough if we use a new instance or if logic supports it.
+             # In this case, creating a new instance is safer given the test setup.
+             with patch.dict(os.environ, self.required_env, clear=True): # Ensure required vars exist
+                 with patch.dict(os.environ, {"MAX_FILE_SIZE": "5242880"}):
+                    config = Config()
+                    self.assertEqual(config.max_file_size, 5242880)
+
 if __name__ == "__main__":
     unittest.main()
