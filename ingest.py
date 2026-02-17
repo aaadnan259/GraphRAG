@@ -206,8 +206,8 @@ class Ingestor:
             rel_count = sum(len(kg.relationships) for kg in kgs)
             
             # Write DBs
-            self._save_graph(kgs)
-            self._save_vectors(chunks, doc_id, filename)
+            await asyncio.to_thread(self._save_graph, kgs)
+            await asyncio.to_thread(self._save_vectors, chunks, doc_id, filename)
             
             return {
                 "success": True,
