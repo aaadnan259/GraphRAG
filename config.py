@@ -3,7 +3,7 @@ Environment configuration and validation.
 """
 
 import os
-from typing import Optional, List
+from typing import List
 from dotenv import load_dotenv
 
 load_dotenv()
