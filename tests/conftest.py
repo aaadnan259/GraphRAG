@@ -3,6 +3,16 @@ Pytest configuration and fixtures for GraphRAG tests.
 Provides mocks for OpenAI API, Neo4j driver, and ChromaDB to enable testing without live credentials.
 """
 
+import os
+
+# Set dummy env vars for testing if they are not set
+os.environ.setdefault("GOOGLE_API_KEY", "dummy")
+os.environ.setdefault("NEO4J_URI", "bolt://localhost:7687")
+os.environ.setdefault("NEO4J_RW_USER", "dummy")
+os.environ.setdefault("NEO4J_RW_PASSWORD", "dummy")
+os.environ.setdefault("NEO4J_RO_USER", "dummy")
+os.environ.setdefault("NEO4J_RO_PASSWORD", "dummy")
+
 import pytest
 from unittest.mock import Mock, MagicMock, AsyncMock, patch
 from typing import List, Dict, Any
