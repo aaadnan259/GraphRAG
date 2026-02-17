@@ -98,7 +98,7 @@ async def get_graph_stats():
     """
     try:
         retriever = HybridRetriever()
-        stats = retriever.get_graph_statistics()
+        stats = await retriever.get_graph_statistics()
         return stats
     except Exception as e:
         logger.error(f"Stats fetch failed: {e}")
@@ -112,7 +112,7 @@ async def search_entities(query: str, limit: int = 10):
     """
     try:
         retriever = HybridRetriever()
-        entities = retriever.search_entities(query, limit)
+        entities = await retriever.search_entities(query, limit)
         return {"entities": entities}
     except Exception as e:
         logger.error(f"Entity search failed: {e}")

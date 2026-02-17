@@ -31,24 +31,26 @@ class TestReadOnlyAccess:
         # Check that get_read_graph was called (not get_write_graph)
         assert retriever._read_graph_mock.called
 
-    def test_read_driver_in_statistics(self, retriever, mock_neo4j_driver):
+    @pytest.mark.asyncio
+    async def test_read_driver_in_statistics(self, retriever, mock_neo4j_driver):
         """Test that statistics query uses read-only driver."""
         # Mock session results
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
         session.run.return_value.single.return_value = {"count": 10}
         session.run.return_value.values.return_value = []
 
-        stats = retriever.get_graph_statistics()
+        stats = await retriever.get_graph_statistics()
 
         # Verify the read driver was used
         assert mock_neo4j_driver.session.called
 
-    def test_read_driver_in_entity_search(self, retriever, mock_neo4j_driver):
+    @pytest.mark.asyncio
+    async def test_read_driver_in_entity_search(self, retriever, mock_neo4j_driver):
         """Test that entity search uses read-only driver."""
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
         session.run.return_value = []
 
-        results = retriever.search_entities("test")
+        results = await retriever.search_entities("test")
 
         # Verify read driver session was created
         assert mock_neo4j_driver.session.called
@@ -310,7 +312,8 @@ class TestGraphStatistics:
             retriever = HybridRetriever()
             return retriever
 
-    def test_get_statistics_success(self, retriever, mock_neo4j_driver):
+    @pytest.mark.asyncio
+    async def test_get_statistics_success(self, retriever, mock_neo4j_driver):
         """Test successful statistics retrieval."""
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
 
@@ -328,19 +331,20 @@ class TestGraphStatistics:
 
         session.run.side_effect = [entity_result, rel_result, type_result, type_result]
 
-        stats = retriever.get_graph_statistics()
+        stats = await retriever.get_graph_statistics()
 
         assert stats["total_entities"] == 100
         assert stats["total_relationships"] == 50
         assert "entity_types" in stats
         assert "relationship_types" in stats
 
-    def test_get_statistics_failure(self, retriever, mock_neo4j_driver):
+    @pytest.mark.asyncio
+    async def test_get_statistics_failure(self, retriever, mock_neo4j_driver):
         """Test that statistics failures are handled gracefully."""
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
         session.run.side_effect = Exception("Database connection failed")
 
-        stats = retriever.get_graph_statistics()
+        stats = await retriever.get_graph_statistics()
 
         # Should return error stats instead of crashing
         assert "error" in stats
@@ -361,7 +365,8 @@ class TestEntitySearch:
             retriever = HybridRetriever()
             return retriever
 
-    def test_search_entities_success(self, retriever, mock_neo4j_driver):
+    @pytest.mark.asyncio
+    async def test_search_entities_success(self, retriever, mock_neo4j_driver):
         """Test successful entity search."""
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
 
@@ -369,28 +374,30 @@ class TestEntitySearch:
         mock_record = {"name": "OpenAI", "type": "ORGANIZATION", "description": "AI company"}
         session.run.return_value = [mock_record]
 
-        results = retriever.search_entities("OpenAI")
+        results = await retriever.search_entities("OpenAI")
 
         assert len(results) == 1
         assert results[0]["name"] == "OpenAI"
 
-    def test_search_entities_with_limit(self, retriever, mock_neo4j_driver):
+    @pytest.mark.asyncio
+    async def test_search_entities_with_limit(self, retriever, mock_neo4j_driver):
         """Test entity search with custom limit."""
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
         session.run.return_value = []
 
-        retriever.search_entities("test", limit=20)
+        await retriever.search_entities("test", limit=20)
 
         # Verify limit parameter was passed
         call_args = session.run.call_args
         assert call_args[1]["limit"] == 20
 
-    def test_search_entities_failure(self, retriever, mock_neo4j_driver):
+    @pytest.mark.asyncio
+    async def test_search_entities_failure(self, retriever, mock_neo4j_driver):
         """Test that entity search failures are handled."""
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
         session.run.side_effect = Exception("Query failed")
 
-        results = retriever.search_entities("test")
+        results = await retriever.search_entities("test")
 
         # Should return empty list instead of crashing
         assert results == []

@@ -32,7 +32,7 @@ print("  [OK] Ingestion pipeline initialized")
 # Test 4: Retriever init
 print("\n[4/5] Testing retriever initialization...")
 retriever = HybridRetriever()
-stats = retriever.get_graph_statistics()
+stats = asyncio.run(retriever.get_graph_statistics())
 print(f"  Graph stats: {stats.get('total_entities', 0)} entities, {stats.get('total_relationships', 0)} relationships")
 print("  [OK] Retriever initialized")
 
