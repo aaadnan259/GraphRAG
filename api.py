@@ -24,16 +24,9 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="GraphRAG API", version="1.0.0")
 
 # CORS Configuration
-origins = [
-    "http://localhost:5173",  # Vite Dev Server
-    "http://localhost:3000",  # Fallback React port
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:3000",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=config.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,8 +49,11 @@ async def query_knowledge_graph(request: QueryRequest):
         response = await retriever.retrieve(request)
         return response
     except Exception as e:
-        logger.error(f"Query failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Query failed")
+        raise HTTPException(
+            status_code=500,
+            detail="An internal server error occurred during query processing."
+        )
 
 
 @app.post("/ingest")
@@ -87,8 +83,11 @@ async def ingest_document(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Ingestion failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Ingestion failed")
+        raise HTTPException(
+            status_code=500,
+            detail="An internal server error occurred during document ingestion."
+        )
 
 
 @app.get("/stats")
@@ -101,8 +100,11 @@ async def get_graph_stats():
         stats = await retriever.get_graph_statistics()
         return stats
     except Exception as e:
-        logger.error(f"Stats fetch failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Stats fetch failed")
+        raise HTTPException(
+            status_code=500,
+            detail="An internal server error occurred while fetching graph statistics."
+        )
 
 
 @app.get("/search/entities")
@@ -115,5 +117,8 @@ async def search_entities(query: str, limit: int = 10):
         entities = await retriever.search_entities(query, limit)
         return {"entities": entities}
     except Exception as e:
-        logger.error(f"Entity search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Entity search failed")
+        raise HTTPException(
+            status_code=500,
+            detail="An internal server error occurred during entity search."
+        )

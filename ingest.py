@@ -95,7 +95,7 @@ class Ingestor:
                 return kg
 
             except Exception as e:
-                logger.error(f"Failed chunk {idx}: {e}")
+                logger.exception(f"Failed chunk {idx}")
                 return None
 
     async def _run_parallel(self, chunks: List[str]) -> List[KnowledgeGraph]:
@@ -206,8 +206,8 @@ class Ingestor:
             rel_count = sum(len(kg.relationships) for kg in kgs)
             
             # Write DBs
-            self._save_graph(kgs)
-            self._save_vectors(chunks, doc_id, filename)
+            await asyncio.to_thread(self._save_graph, kgs)
+            await asyncio.to_thread(self._save_vectors, chunks, doc_id, filename)
             
             return {
                 "success": True,
@@ -219,10 +219,10 @@ class Ingestor:
             }
 
         except Exception as e:
-            logger.error(f"Ingest failed: {e}")
+            logger.exception("Ingest failed")
             return {
                 "success": False,
-                "error": str(e),
+                "error": "Ingestion failed due to an internal error.",
                 "document_id": doc_id,
                 "filename": filename
             }
