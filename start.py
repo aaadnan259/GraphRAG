@@ -25,29 +25,6 @@ def check_frontend_setup():
     else:
         log("Frontend dependencies found.", "INFO")
 
-def start_backend():
-    """Start FastAPI backend using uvicorn."""
-    log(f"Starting Backend on port {BACKEND_PORT}...", "INFO")
-    # Using reload=True for dev experience
-    cmd = [sys.executable, "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", str(BACKEND_PORT), "--reload"]
-    try:
-        subprocess.run(cmd, check=True)
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        log(f"Backend failed: {e}", "ERROR")
-
-def start_frontend():
-    """Start Vite frontend."""
-    log(f"Starting Frontend on port {FRONTEND_PORT}...", "INFO")
-    try:
-        # Use npm run dev
-        subprocess.run("npm run dev", shell=True, cwd=FRONTEND_DIR, check=True)
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        log(f"Frontend failed: {e}", "ERROR")
-
 def main():
     log("=== GraphRAG Engine Launcher ===", "INFO")
     
