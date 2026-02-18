@@ -35,19 +35,27 @@ class Config:
         """Fetch optional environment variable with default."""
         return os.getenv(key, default)
 
+    # Required Environment Variables
+    ENV_GOOGLE_API_KEY = "GOOGLE_API_KEY"
+    ENV_NEO4J_URI = "NEO4J_URI"
+    ENV_NEO4J_RW_USER = "NEO4J_RW_USER"
+    ENV_NEO4J_RW_PASSWORD = "NEO4J_RW_PASSWORD"
+    ENV_NEO4J_RO_USER = "NEO4J_RO_USER"
+    ENV_NEO4J_RO_PASSWORD = "NEO4J_RO_PASSWORD"
+
+    REQUIRED_VARS = [
+        ENV_GOOGLE_API_KEY,
+        ENV_NEO4J_URI,
+        ENV_NEO4J_RW_USER,
+        ENV_NEO4J_RW_PASSWORD,
+        ENV_NEO4J_RO_USER,
+        ENV_NEO4J_RO_PASSWORD,
+    ]
+
     def _validate_all(self):
         """Validate all required configuration on startup."""
-        required_vars = [
-            "GOOGLE_API_KEY",
-            "NEO4J_URI",
-            "NEO4J_RW_USER",
-            "NEO4J_RW_PASSWORD",
-            "NEO4J_RO_USER",
-            "NEO4J_RO_PASSWORD"
-        ]
-
         missing = []
-        for var in required_vars:
+        for var in self.REQUIRED_VARS:
             if not os.getenv(var):
                 missing.append(var)
 
@@ -60,32 +68,32 @@ class Config:
     @property
     def google_api_key(self) -> str:
         """Google API key for Gemini LLM operations."""
-        return self._get_required_env("GOOGLE_API_KEY")
+        return self._get_required_env(self.ENV_GOOGLE_API_KEY)
 
     @property
     def neo4j_uri(self) -> str:
         """Neo4j database URI."""
-        return self._get_required_env("NEO4J_URI")
+        return self._get_required_env(self.ENV_NEO4J_URI)
 
     @property
     def neo4j_rw_user(self) -> str:
         """Neo4j read-write user (for ingestion)."""
-        return self._get_required_env("NEO4J_RW_USER")
+        return self._get_required_env(self.ENV_NEO4J_RW_USER)
 
     @property
     def neo4j_rw_password(self) -> str:
         """Neo4j read-write password."""
-        return self._get_required_env("NEO4J_RW_PASSWORD")
+        return self._get_required_env(self.ENV_NEO4J_RW_PASSWORD)
 
     @property
     def neo4j_ro_user(self) -> str:
         """Neo4j read-only user (for retrieval)."""
-        return self._get_required_env("NEO4J_RO_USER")
+        return self._get_required_env(self.ENV_NEO4J_RO_USER)
 
     @property
     def neo4j_ro_password(self) -> str:
         """Neo4j read-only password."""
-        return self._get_required_env("NEO4J_RO_PASSWORD")
+        return self._get_required_env(self.ENV_NEO4J_RO_PASSWORD)
 
     @property
     def chroma_persist_directory(self) -> str:
