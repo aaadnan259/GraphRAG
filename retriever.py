@@ -244,20 +244,26 @@ class HybridRetriever:
         """
         logger.info(f"Processing query: {request.query[:50]}...")
 
-        vector_context = []
-        graph_context = ""
-
-        try:
+        async def _safe_vector_search() -> List[str]:
             if request.use_vector_search:
-                vector_context = await self._vector_search(request.query)
-        except Exception as e:
-            logger.exception("Vector search failed")
+                try:
+                    return await self._vector_search(request.query)
+                except Exception:
+                    logger.exception("Vector search failed")
+            return []
 
-        try:
+        async def _safe_graph_search() -> str:
             if request.use_graph_search:
-                graph_context = await self._graph_search(request.query)
-        except Exception as e:
-            logger.exception("Graph search failed")
+                try:
+                    return await self._graph_search(request.query)
+                except Exception:
+                    logger.exception("Graph search failed")
+            return ""
+
+        vector_context, graph_context = await asyncio.gather(
+            _safe_vector_search(),
+            _safe_graph_search()
+        )
 
         if not vector_context and not graph_context:
             return QueryResponse(
