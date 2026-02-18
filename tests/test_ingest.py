@@ -138,10 +138,9 @@ class TestKnowledgeExtraction:
 
         pipeline.llm.ainvoke = AsyncMock(return_value=mock_response)
 
-        result = await pipeline._process_chunk("Test text", 0)
-
-        # Should return None on JSON parse error
-        assert result is None
+        # Should raise Exception (after retries) on JSON parse error
+        with pytest.raises(Exception):
+            await pipeline._process_chunk("Test text", 0)
 
     @pytest.mark.asyncio
     async def test_extract_knowledge_empty_response(self, pipeline):
