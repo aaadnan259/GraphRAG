@@ -8,7 +8,7 @@ import asyncio
 import logging
 import uuid
 import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union, AsyncIterator
 from datetime import datetime
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -176,7 +176,7 @@ class Ingestor:
         retry=retry_if_exception_type(Exception),
         reraise=True,
     )
-    def _save_vectors(self, chunks: List[str], doc_id: str, fname: str) -> None:
+    def _save_vectors(self, chunks: List[str], doc_id: str, fname: str, start_index: int = 0) -> None:
         logger.info(f"Writing {len(chunks)} chunks to Chroma...")
         
         docs = []
@@ -184,43 +184,105 @@ class Ingestor:
             meta = {
                 "document_id": doc_id,
                 "filename": fname,
-                "chunk_index": i,
-                "total_chunks": len(chunks),
+                "chunk_index": start_index + i,
+                "total_chunks": -1,  # Indicates unknown total due to streaming
                 "timestamp": datetime.now().isoformat(),
             }
             docs.append(Document(page_content=chunk, metadata=meta))
 
         self.chroma.add_documents(docs, batch_size=100)
 
-    async def ingest(self, text: str, filename: str) -> Dict[str, Any]:
+    async def _process_batch(self, text: str, doc_id: str, filename: str, start_index: int) -> Dict[str, int]:
+        """
+        Process a batch of text: split, extract, save.
+        Returns stats: {num_chunks, num_entities, num_relationships}
+        """
+        chunks = self.splitter.split_text(text)
+        if not chunks:
+            return {"num_chunks": 0, "num_entities": 0, "num_relationships": 0}
+
+        kgs = await self._run_parallel(chunks)
+
+        ent_cnt = sum(len(kg.entities) for kg in kgs)
+        rel_cnt = sum(len(kg.relationships) for kg in kgs)
+
+        await asyncio.to_thread(self._save_graph, kgs)
+        await asyncio.to_thread(self._save_vectors, chunks, doc_id, filename, start_index=start_index)
+
+        return {
+            "num_chunks": len(chunks),
+            "num_entities": ent_cnt,
+            "num_relationships": rel_cnt
+        }
+
+    async def ingest(self, input_data: Union[str, AsyncIterator[str]], filename: str) -> Dict[str, Any]:
         """Run the ingestion flow."""
         logger.info(f"Starting: {filename}")
         doc_id = str(uuid.uuid4())
 
-        chunks = self.splitter.split_text(text)
-        if not chunks:
-            return {"success": False, "error": "No chunks", "document_id": doc_id}
+        async def get_iterator():
+            if isinstance(input_data, str):
+                yield input_data
+            else:
+                async for chunk in input_data:
+                    yield chunk
+
+        buffer = ""
+        # 5MB buffer size before processing
+        BUFFER_SIZE = 5 * 1024 * 1024
+        overlap_size = config.chunk_overlap
+
+        if overlap_size >= BUFFER_SIZE:
+             raise ValueError(f"Chunk overlap ({overlap_size}) must be smaller than buffer size ({BUFFER_SIZE})")
+
+        total_chunks = 0
+        total_entities = 0
+        total_relationships = 0
 
         try:
-            # Parallel extraction
-            kgs = await self._run_parallel(chunks)
+            async for chunk in get_iterator():
+                buffer += chunk
+                while len(buffer) >= BUFFER_SIZE:
+                    to_process = buffer
+
+                    next_buffer_start = ""
+                    if overlap_size > 0 and len(buffer) > overlap_size:
+                        next_buffer_start = buffer[-overlap_size:]
+
+                    stats = await self._process_batch(to_process, doc_id, filename, total_chunks)
+
+                    total_chunks += stats["num_chunks"]
+                    total_entities += stats["num_entities"]
+                    total_relationships += stats["num_relationships"]
+
+                    buffer = next_buffer_start
             
-            ent_count = sum(len(kg.entities) for kg in kgs)
-            rel_count = sum(len(kg.relationships) for kg in kgs)
-            
-            # Write DBs
-            await asyncio.to_thread(self._save_graph, kgs)
-            await asyncio.to_thread(self._save_vectors, chunks, doc_id, filename)
-            
+            if buffer:
+                 stats = await self._process_batch(buffer, doc_id, filename, total_chunks)
+                 total_chunks += stats["num_chunks"]
+                 total_entities += stats["num_entities"]
+                 total_relationships += stats["num_relationships"]
+
+            if total_chunks == 0:
+                return {"success": False, "error": "No chunks", "document_id": doc_id}
+
             return {
                 "success": True,
                 "document_id": doc_id,
                 "filename": filename,
-                "num_chunks": len(chunks),
-                "num_entities": ent_count,
-                "num_relationships": rel_count
+                "num_chunks": total_chunks,
+                "num_entities": total_entities,
+                "num_relationships": total_relationships
             }
 
+        except ValueError as e:
+            logger.warning(f"Ingest failed validation: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "document_id": doc_id,
+                "filename": filename
+            }
         except Exception as e:
             logger.exception("Ingest failed")
             return {
