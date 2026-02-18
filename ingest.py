@@ -81,26 +81,27 @@ class Ingestor:
             # LLM call outside try/except for retry mechanism
             res = await self.llm.ainvoke(self.prompt.format_messages(text=chunk))
 
-            try:
-                # clean up json
-                content = res.content.strip().lstrip("```json").rstrip("```").strip()
-                
-                data = json.loads(content)
-                
-                ents = [Entity(**e) for e in data.get("entities", [])]
-                rels = [Relationship(**r) for r in data.get("relationships", [])]
-                
-                kg = KnowledgeGraph(entities=ents, relationships=rels)
-                logger.info(f"Chunk {idx}: {len(kg.entities)} ents, {len(kg.relationships)} rels")
-                return kg
+            # clean up json
+            content = res.content.strip().lstrip("```json").rstrip("```").strip()
 
-            except Exception as e:
-                logger.exception(f"Failed chunk {idx}")
-                return None
+            data = json.loads(content)
+
+            ents = [Entity(**e) for e in data.get("entities", [])]
+            rels = [Relationship(**r) for r in data.get("relationships", [])]
+
+            kg = KnowledgeGraph(entities=ents, relationships=rels)
+            logger.info(f"Chunk {idx}: {len(kg.entities)} ents, {len(kg.relationships)} rels")
+            return kg
 
     async def _run_parallel(self, chunks: List[str]) -> List[KnowledgeGraph]:
         tasks = [self._process_chunk(chunk, i) for i, chunk in enumerate(chunks)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Log failures
+        for i, res in enumerate(results):
+            if isinstance(res, Exception):
+                logger.error(f"Failed to process chunk {i} after retries: {res}")
+
         return [r for r in results if r and not isinstance(r, Exception)]
 
     @retry(
