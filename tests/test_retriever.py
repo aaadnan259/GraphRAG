@@ -70,8 +70,8 @@ class TestCypherInjectionProtection:
             yield HybridRetriever()
 
     @pytest.mark.asyncio
-    async def test_cypher_chain_has_validate_cypher(self, retriever, mock_neo4j_graph):
-        """Test that GraphCypherQAChain is initialized with validate_cypher=True."""
+    async def test_cypher_chain_safe_init(self, retriever, mock_neo4j_graph):
+        """Test that GraphCypherQAChain is initialized securely."""
         with patch('retriever.GraphCypherQAChain.from_llm') as mock_chain_factory:
             mock_chain = Mock()
             mock_chain.invoke.return_value = {"result": "test result"}
@@ -80,12 +80,15 @@ class TestCypherInjectionProtection:
             # Trigger graph search which creates the chain
             result = await retriever._graph_search("test query")
 
-            # Verify that validate_cypher was passed
+            # Verify that security parameters were passed
             mock_chain_factory.assert_called_once()
             call_kwargs = mock_chain_factory.call_args[1]
 
             assert 'validate_cypher' in call_kwargs, "validate_cypher parameter missing!"
             assert call_kwargs['validate_cypher'] is True, "validate_cypher should be True!"
+
+            assert 'allow_dangerous_requests' in call_kwargs, "allow_dangerous_requests parameter missing!"
+            assert call_kwargs['allow_dangerous_requests'] is False, "allow_dangerous_requests should be False!"
 
     @pytest.mark.asyncio
     async def test_malicious_query_sanitization(self, retriever, malicious_inputs):
