@@ -67,8 +67,7 @@ class TestCypherInjectionProtection:
              patch('retriever.ChatGoogleGenerativeAI'), \
              patch('retriever.Neo4jGraph', return_value=mock_neo4j_graph):
 
-            retriever = HybridRetriever()
-            return retriever
+            yield HybridRetriever()
 
     @pytest.mark.asyncio
     async def test_cypher_chain_has_validate_cypher(self, retriever, mock_neo4j_graph):
@@ -125,32 +124,35 @@ class TestVectorSearch:
             retriever = HybridRetriever()
             return retriever
 
-    def test_vector_search_success(self, retriever, mock_vectorstore):
+    @pytest.mark.asyncio
+    async def test_vector_search_success(self, retriever, mock_vectorstore):
         """Test successful vector search."""
         query = "What is OpenAI?"
 
-        results = retriever._vector_search(query)
+        results = await retriever._vector_search(query)
 
         assert mock_vectorstore.similarity_search.called
         assert isinstance(results, list)
 
-    def test_vector_search_with_k_parameter(self, retriever, mock_vectorstore):
+    @pytest.mark.asyncio
+    async def test_vector_search_with_k_parameter(self, retriever, mock_vectorstore):
         """Test vector search with custom k."""
         query = "Test query"
         k = 10
 
-        retriever._vector_search(query, k=k)
+        await retriever._vector_search(query, k=k)
 
         # Verify k was passed
         call_args = mock_vectorstore.similarity_search.call_args
         assert call_args[1]['k'] == k
 
-    def test_vector_search_failure_raises(self, retriever, mock_vectorstore):
+    @pytest.mark.asyncio
+    async def test_vector_search_failure_raises(self, retriever, mock_vectorstore):
         """Test that vector search failures raise exceptions."""
         mock_vectorstore.similarity_search.side_effect = Exception("Vector DB error")
 
         with pytest.raises(Exception):
-            retriever._vector_search("test query")
+            await retriever._vector_search("test query")
 
 
 class TestGraphSearch:
@@ -164,8 +166,7 @@ class TestGraphSearch:
              patch('retriever.ChatGoogleGenerativeAI'), \
              patch('retriever.Neo4jGraph', return_value=mock_neo4j_graph):
 
-            retriever = HybridRetriever()
-            return retriever
+            yield HybridRetriever()
 
     @pytest.mark.asyncio
     async def test_graph_search_success(self, retriever):
