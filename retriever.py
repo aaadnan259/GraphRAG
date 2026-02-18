@@ -290,23 +290,37 @@ class HybridRetriever:
 
         try:
             with self.read_driver.session() as session:
-                entity_count = session.run("MATCH (e:Entity) RETURN count(e) as count").single()["count"]
-
-                rel_count = session.run("MATCH ()-[r]->() RETURN count(r) as count").single()["count"]
-
-                entity_types = session.run(
-                    "MATCH (e:Entity) RETURN e.type as type, count(e) as count ORDER BY count DESC"
-                ).values()
-
-                rel_types = session.run(
-                    "MATCH ()-[r]->() RETURN type(r) as type, count(r) as count ORDER BY count DESC"
-                ).values()
+                result = session.run(
+                    """
+                    CALL {
+                        MATCH (e:Entity)
+                        RETURN count(e) as entity_count
+                    }
+                    CALL {
+                        MATCH ()-[r]->()
+                        RETURN count(r) as rel_count
+                    }
+                    CALL {
+                        MATCH (e:Entity)
+                        WITH e.type as type, count(e) as count
+                        ORDER BY count DESC
+                        RETURN collect([type, count]) as entity_types
+                    }
+                    CALL {
+                        MATCH ()-[r]->()
+                        WITH type(r) as type, count(r) as count
+                        ORDER BY count DESC
+                        RETURN collect([type, count]) as rel_types
+                    }
+                    RETURN entity_count, rel_count, entity_types, rel_types
+                    """
+                ).single()
 
                 return {
-                    "total_entities": entity_count,
-                    "total_relationships": rel_count,
-                    "entity_types": dict(entity_types),
-                    "relationship_types": dict(rel_types),
+                    "total_entities": result["entity_count"],
+                    "total_relationships": result["rel_count"],
+                    "entity_types": dict(result["entity_types"]),
+                    "relationship_types": dict(result["rel_types"]),
                 }
 
         except Exception as e:
