@@ -23,7 +23,7 @@ from tenacity import (
 )
 
 from config import config
-from models import Entity, Relationship, KnowledgeGraph, DocumentMetadata
+from models import Entity, Relationship, KnowledgeGraph
 from database import get_write_graph, get_vectorstore, initialize_neo4j_schema
 
 logging.basicConfig(level=logging.INFO)
