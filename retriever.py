@@ -19,7 +19,7 @@ from tenacity import (
 
 from config import config
 from models import QueryRequest, QueryResponse
-from database import get_read_graph, get_vectorstore
+from database import get_read_graph, get_vectorstore, get_async_read_graph
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ class HybridRetriever:
 
     def __init__(self):
         """Initialize retriever with READ-ONLY database connections."""
-        self.read_driver = get_read_graph()
+        self._read_driver = None
 
         self.vectorstore = get_vectorstore()
 
@@ -62,6 +62,13 @@ class HybridRetriever:
         self.synthesis_prompt = ChatPromptTemplate.from_template(SYNTHESIS_PROMPT)
 
         self._neo4j_graph: Optional[Neo4jGraph] = None
+
+    @property
+    def read_driver(self):
+        """Lazy load the read driver."""
+        if self._read_driver is None:
+            self._read_driver = get_read_graph()
+        return self._read_driver
 
     def _get_neo4j_graph(self) -> Neo4jGraph:
         """Get or create Neo4j graph wrapper with READ-ONLY credentials."""
@@ -312,9 +319,10 @@ class HybridRetriever:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._get_graph_statistics_sync)
 
-    def _search_entities_sync(self, name_pattern: str, limit: int = 10) -> List[Dict[str, Any]]:
+    async def search_entities(self, name_pattern: str, limit: int = 10) -> List[Dict[str, Any]]:
         """
-        Synchronous implementation of entity search.
+        Search for entities by name pattern (READ-ONLY operation).
+        Uses native async Neo4j driver for non-blocking IO.
 
         Args:
             name_pattern: Pattern to match entity names
@@ -323,11 +331,13 @@ class HybridRetriever:
         Returns:
             List of matching entities
         """
-        logger.info(f"Searching entities matching: {name_pattern}")
+        logger.info(f"Searching entities matching: {name_pattern} (Async)")
 
         try:
-            with self.read_driver.session() as session:
-                result = session.run(
+            driver = await get_async_read_graph()
+
+            async with driver.session() as session:
+                result = await session.run(
                     """
                     MATCH (e:Entity)
                     WHERE toLower(e.name) CONTAINS toLower($pattern)
@@ -338,30 +348,15 @@ class HybridRetriever:
                     limit=limit,
                 )
 
-                entities = [dict(record) for record in result]
+                entities = await result.data()
 
                 logger.info(f"Found {len(entities)} matching entities")
 
                 return entities
 
         except Exception as e:
-            logger.exception("Error searching entities")
+            logger.exception("Error searching entities (Async)")
             return []
-
-    async def search_entities(self, name_pattern: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """
-        Search for entities by name pattern (READ-ONLY operation).
-        Offloads blocking DB operations to thread pool executor.
-
-        Args:
-            name_pattern: Pattern to match entity names
-            limit: Maximum number of results
-
-        Returns:
-            List of matching entities
-        """
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._search_entities_sync, name_pattern, limit)
 
 
 async def query_graphrag(query: str, use_vector: bool = True, use_graph: bool = True) -> QueryResponse:
