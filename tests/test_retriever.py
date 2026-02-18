@@ -36,8 +36,12 @@ class TestReadOnlyAccess:
         """Test that statistics query uses read-only driver."""
         # Mock session results
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
-        session.run.return_value.single.return_value = {"count": 10}
-        session.run.return_value.values.return_value = []
+        session.run.return_value.single.return_value = {
+            "entity_count": 10,
+            "rel_count": 5,
+            "entity_types": {},
+            "rel_types": {}
+        }
 
         stats = await retriever.get_graph_statistics()
 
@@ -321,26 +325,26 @@ class TestGraphStatistics:
         """Test successful statistics retrieval."""
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
 
-        # Mock entity count
-        entity_result = Mock()
-        entity_result.single.return_value = {"count": 100}
+        # Mock result
+        result = Mock()
+        result.single.return_value = {
+            "entity_count": 100,
+            "rel_count": 50,
+            "entity_types": {"PERSON": 30, "ORGANIZATION": 20},
+            "rel_types": {"KNOWS": 25, "WORKS_AT": 25}
+        }
 
-        # Mock relationship count
-        rel_result = Mock()
-        rel_result.single.return_value = {"count": 50}
-
-        # Mock type queries
-        type_result = Mock()
-        type_result.values.return_value = [("PERSON", 30), ("ORGANIZATION", 20)]
-
-        session.run.side_effect = [entity_result, rel_result, type_result, type_result]
+        session.run.return_value = result
 
         stats = await retriever.get_graph_statistics()
 
         assert stats["total_entities"] == 100
         assert stats["total_relationships"] == 50
-        assert "entity_types" in stats
-        assert "relationship_types" in stats
+        assert stats["entity_types"]["PERSON"] == 30
+        assert stats["relationship_types"]["KNOWS"] == 25
+
+        # Verify only one query was executed
+        assert session.run.call_count == 1
 
     @pytest.mark.asyncio
     async def test_get_statistics_failure(self, retriever, mock_neo4j_driver):
