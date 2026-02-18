@@ -327,6 +327,26 @@ class TestRetryMechanism:
         with pytest.raises(Exception):
             await pipeline._process_chunk("Test text", 0)
 
+    def test_save_graph_retry_exhaustion(self, pipeline, mock_neo4j_driver):
+        """Test that _save_graph retries 3 times and raises exception on persistent failure."""
+        # Setup the mock to raise an exception
+        session_mock = mock_neo4j_driver.session.return_value.__enter__.return_value
+        session_mock.run.side_effect = Exception("Neo4j connection failed")
+
+        # Create a dummy KnowledgeGraph with at least one entity to trigger session.run
+        kg = KnowledgeGraph(
+            entities=[Entity(name="Test", type="TEST")],
+            relationships=[]
+        )
+
+        # We need to patch time.sleep to avoid waiting during retries
+        with patch('time.sleep'):
+            with pytest.raises(Exception, match="Neo4j connection failed"):
+                pipeline._save_graph([kg])
+
+        # Verify it was called 3 times (initial + 2 retries = 3 attempts total)
+        assert session_mock.run.call_count == 3
+
 
 class TestVectorStoreWrites:
     """Test vector store write operations."""
