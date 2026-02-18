@@ -146,7 +146,7 @@ class HybridRetriever:
                 graph=graph,
                 verbose=True,
                 return_intermediate_steps=True,
-                allow_dangerous_requests=True,
+                allow_dangerous_requests=False,
                 validate_cypher=True,
             )
 
