@@ -30,7 +30,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-
 ENTITY_EXTRACTION_PROMPT = """Extract entities and relationships from the text.
 
 Text:
@@ -71,7 +70,9 @@ class Ingestor:
 
     @retry(
         stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=config.retry_min_wait, max=config.retry_max_wait),
+        wait=wait_exponential(
+            multiplier=1, min=config.retry_min_wait, max=config.retry_max_wait
+        ),
         retry=retry_if_exception_type(Exception),
         reraise=True,
     )
@@ -84,34 +85,43 @@ class Ingestor:
             try:
                 # clean up json
                 content = res.content.strip().lstrip("```json").rstrip("```").strip()
-                
+
                 data = json.loads(content)
-                
+
                 ents = [Entity(**e) for e in data.get("entities", [])]
                 rels = [Relationship(**r) for r in data.get("relationships", [])]
-                
+
                 kg = KnowledgeGraph(entities=ents, relationships=rels)
-                logger.info(f"Chunk {idx}: {len(kg.entities)} ents, {len(kg.relationships)} rels")
+                logger.info(
+                    f"Chunk {idx}: {len(kg.entities)} ents, {len(kg.relationships)} rels"
+                )
                 return kg
 
-            except Exception as e:
+            except Exception:
                 logger.exception(f"Failed chunk {idx}")
                 return None
 
     async def _run_parallel(self, chunks: List[str]) -> List[KnowledgeGraph]:
         tasks = [self._process_chunk(chunk, i) for i, chunk in enumerate(chunks)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Log failures
+        for i, res in enumerate(results):
+            if isinstance(res, Exception):
+                logger.error(f"Failed to process chunk {i} after retries: {res}")
+
         return [r for r in results if r and not isinstance(r, Exception)]
 
     @retry(
         stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=config.retry_min_wait, max=config.retry_max_wait),
+        wait=wait_exponential(
+            multiplier=1, min=config.retry_min_wait, max=config.retry_max_wait
+        ),
         retry=retry_if_exception_type(Exception),
         reraise=True,
     )
     def _save_graph(self, kgs: List[KnowledgeGraph]) -> None:
         logger.info("Writing to Neo4j...")
-        
         ent_map = {}
         for kg in kgs:
             for e in kg.entities:
@@ -150,9 +160,10 @@ class Ingestor:
 
             if rels:
                 from collections import defaultdict
+
                 by_type = defaultdict(list)
                 for r in rels:
-                    by_type[r['relation_type']].append(r)
+                    by_type[r["relation_type"]].append(r)
 
                 total = 0
                 for rtype, batch in by_type.items():
@@ -172,13 +183,15 @@ class Ingestor:
 
     @retry(
         stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=config.retry_min_wait, max=config.retry_max_wait),
+        wait=wait_exponential(
+            multiplier=1, min=config.retry_min_wait, max=config.retry_max_wait
+        ),
         retry=retry_if_exception_type(Exception),
         reraise=True,
     )
     def _save_vectors(self, chunks: List[str], doc_id: str, fname: str) -> None:
         logger.info(f"Writing {len(chunks)} chunks to Chroma...")
-        
+
         docs = []
         for i, chunk in enumerate(chunks):
             meta = {
@@ -204,30 +217,30 @@ class Ingestor:
         try:
             # Parallel extraction
             kgs = await self._run_parallel(chunks)
-            
+
             ent_count = sum(len(kg.entities) for kg in kgs)
             rel_count = sum(len(kg.relationships) for kg in kgs)
-            
+
             # Write DBs
             await asyncio.to_thread(self._save_graph, kgs)
             await asyncio.to_thread(self._save_vectors, chunks, doc_id, filename)
-            
+
             return {
                 "success": True,
                 "document_id": doc_id,
                 "filename": filename,
                 "num_chunks": len(chunks),
                 "num_entities": ent_count,
-                "num_relationships": rel_count
+                "num_relationships": rel_count,
             }
 
-        except Exception as e:
+        except Exception:
             logger.exception("Ingest failed")
             return {
                 "success": False,
                 "error": "Ingestion failed due to an internal error.",
                 "document_id": doc_id,
-                "filename": filename
+                "filename": filename,
             }
 
     def init_schema(self) -> None:
