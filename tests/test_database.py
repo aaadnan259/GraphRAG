@@ -6,11 +6,8 @@ Tests Neo4j and ChromaDB connection handling, singleton patterns, and helper fun
 import sys
 from unittest.mock import MagicMock, patch
 
-# Mock external dependencies that might not be installed in the test environment
-sys.modules["neo4j"] = MagicMock()
-sys.modules["langchain_chroma"] = MagicMock()
-sys.modules["langchain_google_genai"] = MagicMock()
-sys.modules["dotenv"] = MagicMock()
+# Mock external dependencies are now handled using `patch` where needed
+# instead of polluting the global sys.modules for the whole test suite.
 
 import pytest
 import logging
@@ -44,12 +41,9 @@ class TestNeo4jConnectionManager:
         # Cleanup after test
         Neo4jConnectionManager.close_all()
 
-    def test_get_write_driver_creates_new(self):
+    @patch('database.GraphDatabase')
+    def test_get_write_driver_creates_new(self, mock_graph_database):
         """Test that get_write_driver creates a new driver with RW credentials."""
-        # Use the mocked GraphDatabase from sys.modules
-        mock_graph_database = sys.modules["neo4j"].GraphDatabase
-        # Reset the mock to ensure clean state
-        mock_graph_database.reset_mock()
 
         mock_driver = MagicMock()
         mock_graph_database.driver.return_value = mock_driver
@@ -68,10 +62,9 @@ class TestNeo4jConnectionManager:
         mock_driver.verify_connectivity.assert_called_once()
         assert driver == mock_driver
 
-    def test_get_write_driver_singleton(self):
+    @patch('database.GraphDatabase')
+    def test_get_write_driver_singleton(self, mock_graph_database):
         """Test that get_write_driver returns the existing driver if already created."""
-        mock_graph_database = sys.modules["neo4j"].GraphDatabase
-        mock_graph_database.reset_mock()
 
         mock_driver = MagicMock()
         mock_graph_database.driver.return_value = mock_driver
@@ -85,10 +78,9 @@ class TestNeo4jConnectionManager:
         # Should only be called once
         assert mock_graph_database.driver.call_count == 1
 
-    def test_get_read_driver_creates_new(self):
+    @patch('database.GraphDatabase')
+    def test_get_read_driver_creates_new(self, mock_graph_database):
         """Test that get_read_driver creates a new driver with RO credentials."""
-        mock_graph_database = sys.modules["neo4j"].GraphDatabase
-        mock_graph_database.reset_mock()
 
         mock_driver = MagicMock()
         mock_graph_database.driver.return_value = mock_driver
@@ -106,10 +98,9 @@ class TestNeo4jConnectionManager:
         mock_driver.verify_connectivity.assert_called_once()
         assert driver == mock_driver
 
-    def test_get_read_driver_singleton(self):
+    @patch('database.GraphDatabase')
+    def test_get_read_driver_singleton(self, mock_graph_database):
         """Test that get_read_driver returns the existing driver if already created."""
-        mock_graph_database = sys.modules["neo4j"].GraphDatabase
-        mock_graph_database.reset_mock()
 
         mock_driver = MagicMock()
         mock_graph_database.driver.return_value = mock_driver
@@ -120,10 +111,9 @@ class TestNeo4jConnectionManager:
         assert driver1 is driver2
         assert mock_graph_database.driver.call_count == 1
 
-    def test_verify_connectivity_failure(self):
+    @patch('database.GraphDatabase')
+    def test_verify_connectivity_failure(self, mock_graph_database):
         """Test that connectivity failure raises an exception."""
-        mock_graph_database = sys.modules["neo4j"].GraphDatabase
-        mock_graph_database.reset_mock()
 
         mock_driver = MagicMock()
         mock_driver.verify_connectivity.side_effect = Exception("Connection failed")
@@ -162,10 +152,9 @@ class TestChromaDBManager:
         ChromaDBManager._vectorstore = None
         ChromaDBManager._embeddings = None
 
-    def test_get_embeddings_creates_new(self):
+    @patch('database.GoogleGenerativeAIEmbeddings')
+    def test_get_embeddings_creates_new(self, mock_google_genai):
         """Test that get_embeddings creates a new embeddings instance."""
-        mock_google_genai = sys.modules["langchain_google_genai"].GoogleGenerativeAIEmbeddings
-        mock_google_genai.reset_mock()
         mock_instance = MagicMock()
         mock_google_genai.return_value = mock_instance
 
@@ -177,10 +166,9 @@ class TestChromaDBManager:
         )
         assert embeddings == mock_instance
 
-    def test_get_embeddings_singleton(self):
+    @patch('database.GoogleGenerativeAIEmbeddings')
+    def test_get_embeddings_singleton(self, mock_google_genai):
         """Test that get_embeddings returns the existing instance."""
-        mock_google_genai = sys.modules["langchain_google_genai"].GoogleGenerativeAIEmbeddings
-        mock_google_genai.reset_mock()
 
         emb1 = ChromaDBManager.get_embeddings()
         emb2 = ChromaDBManager.get_embeddings()
@@ -188,10 +176,9 @@ class TestChromaDBManager:
         assert emb1 is emb2
         assert mock_google_genai.call_count == 1
 
-    def test_get_vectorstore_creates_new(self):
+    @patch('database.Chroma')
+    def test_get_vectorstore_creates_new(self, mock_chroma):
         """Test that get_vectorstore creates a new Chroma instance."""
-        mock_chroma = sys.modules["langchain_chroma"].Chroma
-        mock_chroma.reset_mock()
         mock_instance = MagicMock()
         mock_chroma.return_value = mock_instance
 
@@ -209,10 +196,9 @@ class TestChromaDBManager:
             )
             assert vectorstore == mock_instance
 
-    def test_get_vectorstore_singleton(self):
+    @patch('database.Chroma')
+    def test_get_vectorstore_singleton(self, mock_chroma):
         """Test that get_vectorstore returns the existing instance."""
-        mock_chroma = sys.modules["langchain_chroma"].Chroma
-        mock_chroma.reset_mock()
 
         with patch.object(ChromaDBManager, 'get_embeddings'):
             vs1 = ChromaDBManager.get_vectorstore()
