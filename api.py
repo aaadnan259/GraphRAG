@@ -6,6 +6,9 @@ Handles API requests for querying, ingestion, and graph statistics.
 
 import logging
 
+import codecs
+from typing import AsyncIterator
+
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -63,34 +66,33 @@ async def ingest_document(file: UploadFile = File(...)):
         if not file.filename.endswith((".txt", ".md")):
              raise HTTPException(status_code=400, detail="Only .txt and .md files are supported")
 
-        # Read file in chunks to prevent memory exhaustion
-        content_chunks = []
-        total_size = 0
-        CHUNK_SIZE = 1024 * 1024  # 1MB
+        async def file_generator(file: UploadFile) -> AsyncIterator[str]:
+            decoder = codecs.getincrementaldecoder("utf-8")(errors="strict")
+            total_size = 0
+            CHUNK_SIZE = 1024 * 1024  # 1MB
 
-        while True:
-            chunk = await file.read(CHUNK_SIZE)
-            if not chunk:
-                break
-            total_size += len(chunk)
-            if total_size > config.max_file_size:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"File too large. Maximum size is {config.max_file_size} bytes"
-                )
-            content_chunks.append(chunk)
+            while True:
+                chunk = await file.read(CHUNK_SIZE)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > config.max_file_size:
+                    raise ValueError(f"File too large. Maximum size is {config.max_file_size} bytes")
+                yield decoder.decode(chunk, final=False)
 
-        content = b"".join(content_chunks)
-        text = content.decode("utf-8")
+            yield decoder.decode(b"", final=True)
 
         ingestor = Ingestor()
         # Ensure schema exists before ingesting
         ingestor.init_schema()
         
-        result = await ingestor.ingest(text, file.filename)
+        result = await ingestor.ingest(file_generator(file), file.filename)
         
         if not result["success"]:
-            raise HTTPException(status_code=500, detail=result.get("error", "Unknown ingestion error"))
+            error_msg = result.get("error", "Unknown ingestion error")
+            if "File too large" in error_msg:
+                 raise HTTPException(status_code=413, detail=error_msg)
+            raise HTTPException(status_code=500, detail=error_msg)
 
         return result
 

@@ -425,7 +425,7 @@ class TestVectorStoreWrites:
         assert metadata["document_id"] == document_id
         assert metadata["filename"] == filename
         assert metadata["chunk_index"] == 0
-        assert metadata["total_chunks"] == 1
+        assert metadata["total_chunks"] == -1
 
 
 class TestFullIngestionPipeline:
