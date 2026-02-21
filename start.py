@@ -2,6 +2,7 @@
 import subprocess
 import sys
 import os
+import platform
 from pathlib import Path
 
 # Configuration
@@ -12,41 +13,21 @@ FRONTEND_PORT = 5173
 def log(message: str, type: str = "INFO"):
     print(f"[{type}] {message}")
 
+def get_npm_command():
+    return ["npm.cmd"] if platform.system() == "Windows" else ["npm"]
+
 def check_frontend_setup():
     """Ensure frontend dependencies are installed."""
     if not (FRONTEND_DIR / "node_modules").exists():
         log("node_modules not found. Installing dependencies...", "WARN")
         try:
-            subprocess.check_call("npm install", shell=True, cwd=FRONTEND_DIR)
+            subprocess.check_call(get_npm_command() + ["install"], cwd=FRONTEND_DIR)
             log("Frontend dependencies installed.", "SUCCESS")
         except subprocess.CalledProcessError:
             log("Failed to install frontend dependencies.", "ERROR")
             sys.exit(1)
     else:
         log("Frontend dependencies found.", "INFO")
-
-def start_backend():
-    """Start FastAPI backend using uvicorn."""
-    log(f"Starting Backend on port {BACKEND_PORT}...", "INFO")
-    # Using reload=True for dev experience
-    cmd = [sys.executable, "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", str(BACKEND_PORT), "--reload"]
-    try:
-        subprocess.run(cmd, check=True)
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        log(f"Backend failed: {e}", "ERROR")
-
-def start_frontend():
-    """Start Vite frontend."""
-    log(f"Starting Frontend on port {FRONTEND_PORT}...", "INFO")
-    try:
-        # Use npm run dev
-        subprocess.run("npm run dev", shell=True, cwd=FRONTEND_DIR, check=True)
-    except KeyboardInterrupt:
-        pass
-    except Exception as e:
-        log(f"Frontend failed: {e}", "ERROR")
 
 def main():
     log("=== GraphRAG Engine Launcher ===", "INFO")
@@ -67,8 +48,7 @@ def main():
         )
         
         frontend_process = subprocess.Popen(
-            "npm run dev", 
-            shell=True,
+            get_npm_command() + ["run", "dev"],
             cwd=FRONTEND_DIR
         )
 

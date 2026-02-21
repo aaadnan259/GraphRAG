@@ -74,19 +74,9 @@ class HybridRetriever:
             )
         return self._neo4j_graph
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(
-            multiplier=1,
-            min=config.retry_min_wait,
-            max=config.retry_max_wait
-        ),
-        retry=retry_if_exception_type(Exception),
-        reraise=True,
-    )
-    def _vector_search(self, query: str, k: int = None) -> List[str]:
+    def _vector_search_sync(self, query: str, k: int = None) -> List[str]:
         """
-        Perform vector similarity search.
+        Synchronous implementation of vector similarity search.
 
         Args:
             query: User query
@@ -113,6 +103,31 @@ class HybridRetriever:
             logger.exception("Vector search error")
             raise
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(
+            multiplier=1,
+            min=config.retry_min_wait,
+            max=config.retry_max_wait
+        ),
+        retry=retry_if_exception_type(Exception),
+        reraise=True,
+    )
+    async def _vector_search(self, query: str, k: int = None) -> List[str]:
+        """
+        Perform vector similarity search (async wrapper).
+        Offloads blocking DB operations to thread pool executor.
+
+        Args:
+            query: User query
+            k: Number of results to retrieve
+
+        Returns:
+            List of relevant text chunks
+        """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._vector_search_sync, query, k)
+
     def _graph_search_sync(self, query: str) -> str:
         """
         Synchronous graph search operation (runs in thread pool).
@@ -131,7 +146,7 @@ class HybridRetriever:
                 graph=graph,
                 verbose=True,
                 return_intermediate_steps=True,
-                allow_dangerous_requests=True,
+                allow_dangerous_requests=False,
                 validate_cypher=True,
             )
 
@@ -229,20 +244,26 @@ class HybridRetriever:
         """
         logger.info(f"Processing query: {request.query[:50]}...")
 
-        vector_context = []
-        graph_context = ""
-
-        try:
+        async def _safe_vector_search() -> List[str]:
             if request.use_vector_search:
-                vector_context = self._vector_search(request.query)
-        except Exception as e:
-            logger.exception("Vector search failed")
+                try:
+                    return await self._vector_search(request.query)
+                except Exception:
+                    logger.exception("Vector search failed")
+            return []
 
-        try:
+        async def _safe_graph_search() -> str:
             if request.use_graph_search:
-                graph_context = await self._graph_search(request.query)
-        except Exception as e:
-            logger.exception("Graph search failed")
+                try:
+                    return await self._graph_search(request.query)
+                except Exception:
+                    logger.exception("Graph search failed")
+            return ""
+
+        vector_context, graph_context = await asyncio.gather(
+            _safe_vector_search(),
+            _safe_graph_search()
+        )
 
         if not vector_context and not graph_context:
             return QueryResponse(
@@ -275,23 +296,37 @@ class HybridRetriever:
 
         try:
             with self.read_driver.session() as session:
-                entity_count = session.run("MATCH (e:Entity) RETURN count(e) as count").single()["count"]
-
-                rel_count = session.run("MATCH ()-[r]->() RETURN count(r) as count").single()["count"]
-
-                entity_types = session.run(
-                    "MATCH (e:Entity) RETURN e.type as type, count(e) as count ORDER BY count DESC"
-                ).values()
-
-                rel_types = session.run(
-                    "MATCH ()-[r]->() RETURN type(r) as type, count(r) as count ORDER BY count DESC"
-                ).values()
+                result = session.run(
+                    """
+                    CALL {
+                        MATCH (e:Entity)
+                        RETURN count(e) as entity_count
+                    }
+                    CALL {
+                        MATCH ()-[r]->()
+                        RETURN count(r) as rel_count
+                    }
+                    CALL {
+                        MATCH (e:Entity)
+                        WITH e.type as type, count(e) as count
+                        ORDER BY count DESC
+                        RETURN collect([type, count]) as entity_types
+                    }
+                    CALL {
+                        MATCH ()-[r]->()
+                        WITH type(r) as type, count(r) as count
+                        ORDER BY count DESC
+                        RETURN collect([type, count]) as rel_types
+                    }
+                    RETURN entity_count, rel_count, entity_types, rel_types
+                    """
+                ).single()
 
                 return {
-                    "total_entities": entity_count,
-                    "total_relationships": rel_count,
-                    "entity_types": dict(entity_types),
-                    "relationship_types": dict(rel_types),
+                    "total_entities": result["entity_count"],
+                    "total_relationships": result["rel_count"],
+                    "entity_types": dict(result["entity_types"]),
+                    "relationship_types": dict(result["rel_types"]),
                 }
 
         except Exception as e:

@@ -23,7 +23,7 @@ from tenacity import (
 )
 
 from config import config
-from models import Entity, Relationship, KnowledgeGraph, DocumentMetadata
+from models import Entity, Relationship, KnowledgeGraph
 from database import get_write_graph, get_vectorstore, initialize_neo4j_schema
 
 logging.basicConfig(level=logging.INFO)
@@ -81,26 +81,27 @@ class Ingestor:
             # LLM call outside try/except for retry mechanism
             res = await self.llm.ainvoke(self.prompt.format_messages(text=chunk))
 
-            try:
-                # clean up json
-                content = res.content.strip().lstrip("```json").rstrip("```").strip()
-                
-                data = json.loads(content)
-                
-                ents = [Entity(**e) for e in data.get("entities", [])]
-                rels = [Relationship(**r) for r in data.get("relationships", [])]
-                
-                kg = KnowledgeGraph(entities=ents, relationships=rels)
-                logger.info(f"Chunk {idx}: {len(kg.entities)} ents, {len(kg.relationships)} rels")
-                return kg
+            # clean up json
+            content = res.content.strip().lstrip("```json").rstrip("```").strip()
 
-            except Exception as e:
-                logger.exception(f"Failed chunk {idx}")
-                return None
+            data = json.loads(content)
+
+            ents = [Entity(**e) for e in data.get("entities", [])]
+            rels = [Relationship(**r) for r in data.get("relationships", [])]
+
+            kg = KnowledgeGraph(entities=ents, relationships=rels)
+            logger.info(f"Chunk {idx}: {len(kg.entities)} ents, {len(kg.relationships)} rels")
+            return kg
 
     async def _run_parallel(self, chunks: List[str]) -> List[KnowledgeGraph]:
         tasks = [self._process_chunk(chunk, i) for i, chunk in enumerate(chunks)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Log failures
+        for i, res in enumerate(results):
+            if isinstance(res, Exception):
+                logger.error(f"Failed to process chunk {i} after retries: {res}")
+
         return [r for r in results if r and not isinstance(r, Exception)]
 
     @retry(
@@ -112,25 +113,27 @@ class Ingestor:
     def _save_graph(self, kgs: List[KnowledgeGraph]) -> None:
         logger.info("Writing to Neo4j...")
         
-        ents = {}
+        ent_map = {}
         for kg in kgs:
             for e in kg.entities:
-                ents[e.name] = {
+                ent_map[e.name] = {
                     "name": e.name, 
                     "type": e.type, 
                     "description": e.description or ""
                 }
-        ents = list(ents.values())
+        ents = list(ent_map.values())
 
-        rels = []
+        rel_map = {}
         for kg in kgs:
             for r in kg.relationships:
-                rels.append({
+                key = (r.source, r.relation_type, r.target)
+                rel_map[key] = {
                     "source": r.source,
                     "target": r.target,
                     "relation_type": r.relation_type,
                     "description": r.description or ""
-                })
+                }
+        rels = list(rel_map.values())
 
         with self.driver.session() as session:
             if ents:

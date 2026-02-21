@@ -38,8 +38,12 @@ class TestReadOnlyAccess:
         """Test that statistics query uses read-only driver."""
         # Mock session results
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
-        session.run.return_value.single.return_value = {"count": 10}
-        session.run.return_value.values.return_value = []
+        session.run.return_value.single.return_value = {
+            "entity_count": 10,
+            "rel_count": 5,
+            "entity_types": {},
+            "rel_types": {}
+        }
 
         stats = await retriever.get_graph_statistics()
 
@@ -73,8 +77,8 @@ class TestCypherInjectionProtection:
             yield retriever
 
     @pytest.mark.asyncio
-    async def test_cypher_chain_has_validate_cypher(self, retriever, mock_neo4j_graph):
-        """Test that GraphCypherQAChain is initialized with validate_cypher=True."""
+    async def test_cypher_chain_safe_init(self, retriever, mock_neo4j_graph):
+        """Test that GraphCypherQAChain is initialized securely."""
         with patch('retriever.GraphCypherQAChain.from_llm') as mock_chain_factory:
             mock_chain = Mock()
             mock_chain.invoke.return_value = {"result": "test result"}
@@ -83,12 +87,15 @@ class TestCypherInjectionProtection:
             # Trigger graph search which creates the chain
             result = await retriever._graph_search("test query")
 
-            # Verify that validate_cypher was passed
+            # Verify that security parameters were passed
             mock_chain_factory.assert_called_once()
             call_kwargs = mock_chain_factory.call_args[1]
 
             assert 'validate_cypher' in call_kwargs, "validate_cypher parameter missing!"
             assert call_kwargs['validate_cypher'] is True, "validate_cypher should be True!"
+
+            assert 'allow_dangerous_requests' in call_kwargs, "allow_dangerous_requests parameter missing!"
+            assert call_kwargs['allow_dangerous_requests'] is False, "allow_dangerous_requests should be False!"
 
     @pytest.mark.asyncio
     async def test_malicious_query_sanitization(self, retriever, malicious_inputs):
@@ -127,32 +134,35 @@ class TestVectorSearch:
             retriever = HybridRetriever()
             yield retriever
 
-    def test_vector_search_success(self, retriever, mock_vectorstore):
+    @pytest.mark.asyncio
+    async def test_vector_search_success(self, retriever, mock_vectorstore):
         """Test successful vector search."""
         query = "What is OpenAI?"
 
-        results = retriever._vector_search(query)
+        results = await retriever._vector_search(query)
 
         assert mock_vectorstore.similarity_search.called
         assert isinstance(results, list)
 
-    def test_vector_search_with_k_parameter(self, retriever, mock_vectorstore):
+    @pytest.mark.asyncio
+    async def test_vector_search_with_k_parameter(self, retriever, mock_vectorstore):
         """Test vector search with custom k."""
         query = "Test query"
         k = 10
 
-        retriever._vector_search(query, k=k)
+        await retriever._vector_search(query, k=k)
 
         # Verify k was passed
         call_args = mock_vectorstore.similarity_search.call_args
         assert call_args[1]['k'] == k
 
-    def test_vector_search_failure_raises(self, retriever, mock_vectorstore):
+    @pytest.mark.asyncio
+    async def test_vector_search_failure_raises(self, retriever, mock_vectorstore):
         """Test that vector search failures raise exceptions."""
         mock_vectorstore.similarity_search.side_effect = Exception("Vector DB error")
 
         with pytest.raises(Exception):
-            retriever._vector_search("test query")
+            await retriever._vector_search("test query")
 
 
 class TestGraphSearch:
@@ -319,26 +329,26 @@ class TestGraphStatistics:
         """Test successful statistics retrieval."""
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
 
-        # Mock entity count
-        entity_result = Mock()
-        entity_result.single.return_value = {"count": 100}
+        # Mock result
+        result = Mock()
+        result.single.return_value = {
+            "entity_count": 100,
+            "rel_count": 50,
+            "entity_types": {"PERSON": 30, "ORGANIZATION": 20},
+            "rel_types": {"KNOWS": 25, "WORKS_AT": 25}
+        }
 
-        # Mock relationship count
-        rel_result = Mock()
-        rel_result.single.return_value = {"count": 50}
-
-        # Mock type queries
-        type_result = Mock()
-        type_result.values.return_value = [("PERSON", 30), ("ORGANIZATION", 20)]
-
-        session.run.side_effect = [entity_result, rel_result, type_result, type_result]
+        session.run.return_value = result
 
         stats = await retriever.get_graph_statistics()
 
         assert stats["total_entities"] == 100
         assert stats["total_relationships"] == 50
-        assert "entity_types" in stats
-        assert "relationship_types" in stats
+        assert stats["entity_types"]["PERSON"] == 30
+        assert stats["relationship_types"]["KNOWS"] == 25
+
+        # Verify only one query was executed
+        assert session.run.call_count == 1
 
     @pytest.mark.asyncio
     async def test_get_statistics_failure(self, retriever, mock_neo4j_driver):
