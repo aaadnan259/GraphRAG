@@ -364,7 +364,7 @@ class TestRetryMechanism:
         session_mock = mock_neo4j_driver.session.return_value.__enter__.return_value
         session_mock.run.side_effect = Exception("Neo4j connection failed")
 
-        # Create a dummy KnowledgeGraph with data to trigger session.run
+        # Create a dummy KnowledgeGraph with at least one entity to trigger session.run
         kg = KnowledgeGraph(
             entities=[Entity(name="Test", type="TEST")],
             relationships=[]
