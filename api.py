@@ -5,12 +5,9 @@ Handles API requests for querying, ingestion, and graph statistics.
 """
 
 import logging
-import shutil
-from typing import List, Optional
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 
 from config import config
 from models import QueryRequest, QueryResponse

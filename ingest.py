@@ -104,6 +104,12 @@ class Ingestor:
     async def _run_parallel(self, chunks: List[str]) -> List[KnowledgeGraph]:
         tasks = [self._process_chunk(chunk, i) for i, chunk in enumerate(chunks)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Log failures
+        for i, res in enumerate(results):
+            if isinstance(res, Exception):
+                logger.error(f"Failed to process chunk {i} after retries: {res}")
+
         return [r for r in results if r and not isinstance(r, Exception)]
 
     @retry(
@@ -116,25 +122,27 @@ class Ingestor:
     )
     def _save_graph(self, kgs: List[KnowledgeGraph]) -> None:
         logger.info("Writing to Neo4j...")
-
-        ents = []
+        ent_map = {}
         for kg in kgs:
             for e in kg.entities:
-                ents.append(
-                    {"name": e.name, "type": e.type, "description": e.description or ""}
-                )
+                ent_map[e.name] = {
+                    "name": e.name, 
+                    "type": e.type, 
+                    "description": e.description or ""
+                }
+        ents = list(ent_map.values())
 
-        rels = []
+        rel_map = {}
         for kg in kgs:
             for r in kg.relationships:
-                rels.append(
-                    {
-                        "source": r.source,
-                        "target": r.target,
-                        "relation_type": r.relation_type,
-                        "description": r.description or "",
-                    }
-                )
+                key = (r.source, r.relation_type, r.target)
+                rel_map[key] = {
+                    "source": r.source,
+                    "target": r.target,
+                    "relation_type": r.relation_type,
+                    "description": r.description or ""
+                }
+        rels = list(rel_map.values())
 
         with self.driver.session() as session:
             if ents:
