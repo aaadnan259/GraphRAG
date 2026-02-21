@@ -1,29 +1,10 @@
-
 import sys
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 import os
 
-# Mock all dependencies
-mock_fastapi = MagicMock()
-mock_fastapi_app = MagicMock()
-mock_fastapi.FastAPI.return_value = mock_fastapi_app
-sys.modules["fastapi"] = mock_fastapi
-sys.modules["fastapi.middleware.cors"] = MagicMock()
-
-sys.modules["pydantic"] = MagicMock()
-sys.modules["ingest"] = MagicMock()
-sys.modules["retriever"] = MagicMock()
-sys.modules["models"] = MagicMock()
-sys.modules["dotenv"] = MagicMock()
-
-# Set env vars at module level so config.py can be imported by conftest fixture
-os.environ["GOOGLE_API_KEY"] = "dummy"
-os.environ["NEO4J_URI"] = "bolt://localhost:7687"
-os.environ["NEO4J_RW_USER"] = "neo4j"
-os.environ["NEO4J_RW_PASSWORD"] = "password"
-os.environ["NEO4J_RO_USER"] = "neo4j_ro"
-os.environ["NEO4J_RO_PASSWORD"] = "password"
+# We no longer mock fastapi and other dependencies globally here
+# to avoid polluting sys.modules for other tests in the suite.
 
 class TestApiCors(unittest.TestCase):
     def test_cors_middleware_added(self):
@@ -37,26 +18,33 @@ class TestApiCors(unittest.TestCase):
             "NEO4J_RO_PASSWORD": "password",
             "ALLOWED_ORIGINS": "http://mock-origin.com"
         }):
-            # Force reload of api and config to pick up env vars
+            # Force reload of config and api to pick up env vars for testing purposes.
+            # We must restore the original modules afterwards to avoid leakage.
+            original_config = sys.modules.get("config")
+            original_api = sys.modules.get("api")
+            
             if "api" in sys.modules:
                 del sys.modules["api"]
             if "config" in sys.modules:
                 del sys.modules["config"]
 
-            import api
-
-            # Verify add_middleware was called
-            # api.app is the mock_fastapi_app
-            self.assertTrue(api.app.add_middleware.called)
-
-            # Check arguments
-            # args[0] might be CORSMiddleware class
-            # kwargs should contain allow_origins
-            args, kwargs = api.app.add_middleware.call_args
-
-            # Check that allow_origins is passed and correct
-            self.assertIn('allow_origins', kwargs)
-            self.assertEqual(kwargs['allow_origins'], ['http://mock-origin.com'])
+            try:
+                import api
+                from fastapi.middleware.cors import CORSMiddleware
+                
+                # Verify CORSMiddleware is in user_middleware and has correct origins
+                cors_middleware = next(
+                    (m for m in api.app.user_middleware if m.cls == CORSMiddleware),
+                    None
+                )
+                self.assertIsNotNone(cors_middleware, "CORSMiddleware should be added to the app")
+                self.assertEqual(cors_middleware.kwargs['allow_origins'], ['http://mock-origin.com'])
+            finally:
+                # Restore original modules
+                if original_config:
+                    sys.modules["config"] = original_config
+                if original_api:
+                    sys.modules["api"] = original_api
 
 if __name__ == "__main__":
     unittest.main()

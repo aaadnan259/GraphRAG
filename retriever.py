@@ -19,10 +19,12 @@ from tenacity import (
 
 from config import config
 from models import QueryRequest, QueryResponse
-from database import get_read_graph, get_vectorstore
+from database import get_read_graph, get_vectorstore, get_async_read_graph
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+GRAPH_SEARCH_ERROR_MSG = "Graph search unavailable due to an internal error."
 
 
 SYNTHESIS_PROMPT = """You are a helpful AI assistant that answers questions based on provided context.
@@ -49,7 +51,7 @@ class HybridRetriever:
 
     def __init__(self):
         """Initialize retriever with READ-ONLY database connections."""
-        self.read_driver = get_read_graph()
+        self._read_driver = None
 
         self.vectorstore = get_vectorstore()
 
@@ -62,6 +64,13 @@ class HybridRetriever:
         self.synthesis_prompt = ChatPromptTemplate.from_template(SYNTHESIS_PROMPT)
 
         self._neo4j_graph: Optional[Neo4jGraph] = None
+
+    @property
+    def read_driver(self):
+        """Lazy load the read driver."""
+        if self._read_driver is None:
+            self._read_driver = get_read_graph()
+        return self._read_driver
 
     def _get_neo4j_graph(self) -> Neo4jGraph:
         """Get or create Neo4j graph wrapper with READ-ONLY credentials."""
@@ -138,29 +147,24 @@ class HybridRetriever:
         Returns:
             Graph context as string
         """
-        try:
-            graph = self._get_neo4j_graph()
+        graph = self._get_neo4j_graph()
 
-            chain = GraphCypherQAChain.from_llm(
-                llm=self.llm,
-                graph=graph,
-                verbose=True,
-                return_intermediate_steps=True,
-                allow_dangerous_requests=True,
-                validate_cypher=True,
-            )
+        chain = GraphCypherQAChain.from_llm(
+            llm=self.llm,
+            graph=graph,
+            verbose=True,
+            return_intermediate_steps=True,
+            allow_dangerous_requests=False,
+            validate_cypher=True,
+        )
 
-            result = chain.invoke({"query": query})
+        result = chain.invoke({"query": query})
 
-            graph_context = result.get("result", "")
+        graph_context = result.get("result", "")
 
-            logger.info(f"Graph search completed")
+        logger.info(f"Graph search completed")
 
-            return graph_context
-
-        except Exception as e:
-            logger.exception("Graph search error")
-            return "Graph search unavailable due to an internal error."
+        return graph_context
 
     @retry(
         stop=stop_after_attempt(3),
@@ -244,22 +248,29 @@ class HybridRetriever:
         """
         logger.info(f"Processing query: {request.query[:50]}...")
 
-        vector_context = []
-        graph_context = ""
-
-        try:
+        async def _safe_vector_search() -> List[str]:
             if request.use_vector_search:
-                vector_context = await self._vector_search(request.query)
-        except Exception as e:
-            logger.exception("Vector search failed")
+                try:
+                    return await self._vector_search(request.query)
+                except Exception:
+                    logger.exception("Vector search failed")
+            return []
 
-        try:
+        async def _safe_graph_search() -> str:
             if request.use_graph_search:
-                graph_context = await self._graph_search(request.query)
-        except Exception as e:
-            logger.exception("Graph search failed")
+                try:
+                    return await self._graph_search(request.query)
+                except Exception:
+                    logger.exception("Graph search failed")
+                    return GRAPH_SEARCH_ERROR_MSG
+            return ""
 
-        if not vector_context and not graph_context:
+        vector_context, graph_context = await asyncio.gather(
+            _safe_vector_search(),
+            _safe_graph_search()
+        )
+
+        if not vector_context and (not graph_context or graph_context == GRAPH_SEARCH_ERROR_MSG):
             return QueryResponse(
                 answer="I couldn't find any relevant information to answer your question.",
                 vector_context=[],
@@ -290,23 +301,37 @@ class HybridRetriever:
 
         try:
             with self.read_driver.session() as session:
-                entity_count = session.run("MATCH (e:Entity) RETURN count(e) as count").single()["count"]
-
-                rel_count = session.run("MATCH ()-[r]->() RETURN count(r) as count").single()["count"]
-
-                entity_types = session.run(
-                    "MATCH (e:Entity) RETURN e.type as type, count(e) as count ORDER BY count DESC"
-                ).values()
-
-                rel_types = session.run(
-                    "MATCH ()-[r]->() RETURN type(r) as type, count(r) as count ORDER BY count DESC"
-                ).values()
+                result = session.run(
+                    """
+                    CALL {
+                        MATCH (e:Entity)
+                        RETURN count(e) as entity_count
+                    }
+                    CALL {
+                        MATCH ()-[r]->()
+                        RETURN count(r) as rel_count
+                    }
+                    CALL {
+                        MATCH (e:Entity)
+                        WITH e.type as type, count(e) as count
+                        ORDER BY count DESC
+                        RETURN collect([type, count]) as entity_types
+                    }
+                    CALL {
+                        MATCH ()-[r]->()
+                        WITH type(r) as type, count(r) as count
+                        ORDER BY count DESC
+                        RETURN collect([type, count]) as rel_types
+                    }
+                    RETURN entity_count, rel_count, entity_types, rel_types
+                    """
+                ).single()
 
                 return {
-                    "total_entities": entity_count,
-                    "total_relationships": rel_count,
-                    "entity_types": dict(entity_types),
-                    "relationship_types": dict(rel_types),
+                    "total_entities": result["entity_count"],
+                    "total_relationships": result["rel_count"],
+                    "entity_types": dict(result["entity_types"]),
+                    "relationship_types": dict(result["rel_types"]),
                 }
 
         except Exception as e:
@@ -327,9 +352,10 @@ class HybridRetriever:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._get_graph_statistics_sync)
 
-    def _search_entities_sync(self, name_pattern: str, limit: int = 10) -> List[Dict[str, Any]]:
+    async def search_entities(self, name_pattern: str, limit: int = 10) -> List[Dict[str, Any]]:
         """
-        Synchronous implementation of entity search.
+        Search for entities by name pattern (READ-ONLY operation).
+        Uses native async Neo4j driver for non-blocking IO.
 
         Args:
             name_pattern: Pattern to match entity names
@@ -338,11 +364,13 @@ class HybridRetriever:
         Returns:
             List of matching entities
         """
-        logger.info(f"Searching entities matching: {name_pattern}")
+        logger.info(f"Searching entities matching: {name_pattern} (Async)")
 
         try:
-            with self.read_driver.session() as session:
-                result = session.run(
+            driver = await get_async_read_graph()
+
+            async with driver.session() as session:
+                result = await session.run(
                     """
                     MATCH (e:Entity)
                     WHERE toLower(e.name) CONTAINS toLower($pattern)
@@ -353,30 +381,15 @@ class HybridRetriever:
                     limit=limit,
                 )
 
-                entities = [dict(record) for record in result]
+                entities = await result.data()
 
                 logger.info(f"Found {len(entities)} matching entities")
 
                 return entities
 
         except Exception as e:
-            logger.exception("Error searching entities")
+            logger.exception("Error searching entities (Async)")
             return []
-
-    async def search_entities(self, name_pattern: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """
-        Search for entities by name pattern (READ-ONLY operation).
-        Offloads blocking DB operations to thread pool executor.
-
-        Args:
-            name_pattern: Pattern to match entity names
-            limit: Maximum number of results
-
-        Returns:
-            List of matching entities
-        """
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._search_entities_sync, name_pattern, limit)
 
 
 async def query_graphrag(query: str, use_vector: bool = True, use_graph: bool = True) -> QueryResponse:

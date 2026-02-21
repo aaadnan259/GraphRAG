@@ -33,7 +33,16 @@ class TestFileUploadLimits:
 
             with patch("api.Ingestor") as MockIngestor:
                 mock_ingestor_instance = MockIngestor.return_value
-                mock_ingestor_instance.ingest = AsyncMock(return_value={"success": True})
+                
+                async def mock_ingest(data_iterator, filename):
+                    try:
+                        async for _ in data_iterator:
+                            pass
+                    except ValueError as e:
+                        return {"success": False, "error": str(e), "document_id": "mock_id", "filename": filename}
+                    return {"success": True}
+                    
+                mock_ingestor_instance.ingest = AsyncMock(side_effect=mock_ingest)
                 mock_ingestor_instance.init_schema = MagicMock()
 
                 response = client.post(
@@ -80,7 +89,16 @@ class TestFileUploadLimits:
 
             with patch("api.Ingestor") as MockIngestor:
                 mock_ingestor_instance = MockIngestor.return_value
-                mock_ingestor_instance.ingest = AsyncMock(return_value={"success": True})
+                
+                async def mock_ingest(data_iterator, filename):
+                    try:
+                        async for _ in data_iterator:
+                            pass
+                    except ValueError as e:
+                        return {"success": False, "error": str(e), "document_id": "mock_id", "filename": filename}
+                    return {"success": True}
+                    
+                mock_ingestor_instance.ingest = AsyncMock(side_effect=mock_ingest)
                 mock_ingestor_instance.init_schema = MagicMock()
 
                 # We don't want to actually generate 11MB of data if we can avoid it,

@@ -4,7 +4,7 @@ Neo4j and ChromaDB connection management.
 
 import logging
 from typing import Optional
-from neo4j import GraphDatabase, Driver
+from neo4j import GraphDatabase, Driver, AsyncGraphDatabase, AsyncDriver
 from langchain_chroma import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from config import config
@@ -79,6 +79,48 @@ class Neo4jConnectionManager:
             logger.info("Neo4j READ driver closed")
 
 
+class AsyncNeo4jConnectionManager:
+    """Singleton manager for Async Neo4j connections."""
+
+    _read_driver: Optional[AsyncDriver] = None
+
+    @classmethod
+    async def get_read_driver(cls) -> AsyncDriver:
+        """
+        Get or create the READ-ONLY async driver for retrieval operations.
+        Uses NEO4J_RO_USER credentials.
+        """
+        if cls._read_driver is None:
+            logger.info("Initializing Neo4j Async READ driver with RO credentials")
+            cls._read_driver = AsyncGraphDatabase.driver(
+                config.neo4j_uri,
+                auth=(config.neo4j_ro_user, config.neo4j_ro_password),
+                max_connection_lifetime=3600,
+                max_connection_pool_size=50,
+                connection_timeout=30,
+            )
+            await cls._verify_connectivity(cls._read_driver, "READ")
+        return cls._read_driver
+
+    @classmethod
+    async def _verify_connectivity(cls, driver: AsyncDriver, mode: str) -> None:
+        """Verify database connectivity."""
+        try:
+            await driver.verify_connectivity()
+            logger.info(f"Neo4j {mode} Async driver connected successfully")
+        except Exception as e:
+            logger.error(f"Failed to connect Neo4j {mode} Async driver: {e}")
+            raise
+
+    @classmethod
+    async def close_all(cls) -> None:
+        """Close all async database connections."""
+        if cls._read_driver:
+            await cls._read_driver.close()
+            cls._read_driver = None
+            logger.info("Neo4j Async READ driver closed")
+
+
 class ChromaDBManager:
     """Singleton manager for ChromaDB vector store."""
 
@@ -129,6 +171,14 @@ def get_read_graph() -> Driver:
     CRITICAL: This user must be configured with READ-ONLY permissions at the database level.
     """
     return Neo4jConnectionManager.get_read_driver()
+
+
+async def get_async_read_graph() -> AsyncDriver:
+    """
+    Get Neo4j async driver with READ-ONLY privileges for retrieval.
+    This connection uses NEO4J_RO_USER credentials.
+    """
+    return await AsyncNeo4jConnectionManager.get_read_driver()
 
 
 def get_vectorstore() -> Chroma:
@@ -183,3 +233,7 @@ def verify_read_only_permissions(driver: Driver) -> bool:
         except Exception as e:
             logger.info(f"Read-only verification passed: {e}")
             return True
+
+async def close_all_async_connections() -> None:
+    """Close all async database connections."""
+    await AsyncNeo4jConnectionManager.close_all()
