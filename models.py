@@ -3,7 +3,7 @@ Data models and validation schemas.
 """
 
 from typing import List, Optional
-from pydantic import BaseModel, Field, field_validator, ValidationError
+from pydantic import BaseModel, Field, field_validator
 import re
 
 

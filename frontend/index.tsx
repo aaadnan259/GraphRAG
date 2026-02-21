@@ -1,9 +1,10 @@
+/// <reference types="vite/client" />
 import React, { useState, useEffect, useRef } from "react";
 import ReactDOM from "react-dom/client";
 
 // --- Configuration & Types ---
 
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 interface Message {
   role: "user" | "model";
@@ -27,6 +28,33 @@ interface GraphStats {
   relationship_types: Record<string, number>;
 }
 
+interface QueryResponse {
+  answer: string;
+  vector_context: string[];
+  graph_context: string;
+  sources: string[];
+}
+
+interface IngestResponse {
+  success: boolean;
+  document_id: string;
+  filename: string;
+  num_chunks?: number;
+  num_entities?: number;
+  num_relationships?: number;
+  error?: string;
+}
+
+interface EntityResult {
+  name: string;
+  type: string;
+  description?: string;
+}
+
+interface SearchEntitiesResponse {
+  entities: EntityResult[];
+}
+
 // --- API Service Layer ---
 
 class APIService {
@@ -36,7 +64,7 @@ class APIService {
     this.baseUrl = baseUrl;
   }
 
-  async query(queryText: string, useVector: boolean = true, useGraph: boolean = true): Promise<any> {
+  async query(queryText: string, useVector: boolean = true, useGraph: boolean = true): Promise<QueryResponse> {
     const response = await fetch(`${this.baseUrl}/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -54,7 +82,7 @@ class APIService {
     return await response.json();
   }
 
-  async ingest(file: File): Promise<any> {
+  async ingest(file: File): Promise<IngestResponse> {
     const formData = new FormData();
     formData.append("file", file);
 
@@ -80,7 +108,7 @@ class APIService {
     return await response.json();
   }
 
-  async searchEntities(query: string, limit: number = 10): Promise<any> {
+  async searchEntities(query: string, limit: number = 10): Promise<SearchEntitiesResponse> {
     const response = await fetch(`${this.baseUrl}/search/entities?query=${encodeURIComponent(query)}&limit=${limit}`);
 
     if (!response.ok) {
@@ -443,7 +471,7 @@ const KnowledgeBaseView = () => {
 const GraphExplorerView = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<EntityResult[]>([]);
   
   useEffect(() => {
     const canvas = canvasRef.current;

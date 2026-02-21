@@ -138,9 +138,8 @@ class TestKnowledgeExtraction:
 
         pipeline.llm.ainvoke = AsyncMock(return_value=mock_response)
 
+        # Should return None (after retries) on JSON parse error, instead of raising Exception
         result = await pipeline._process_chunk("Test text", 0)
-
-        # Should return None on JSON parse error
         assert result is None
 
     @pytest.mark.asyncio
@@ -277,6 +276,37 @@ class TestBatchWrites:
         call_count = session.run.call_count
         assert call_count == 3  # 1 entities + 2 relationship types
 
+    def test_save_graph_deduplicates_entities(self, pipeline, mock_neo4j_driver):
+        """Test that entities with the same name are deduplicated before saving."""
+        # Create two knowledge graphs with the same entity
+        kg1 = KnowledgeGraph(
+            entities=[Entity(name="CommonEntity", type="PERSON", description="Desc 1")],
+            relationships=[]
+        )
+        kg2 = KnowledgeGraph(
+            entities=[Entity(name="CommonEntity", type="PERSON", description="Desc 2")],
+            relationships=[]
+        )
+
+        pipeline._save_graph([kg1, kg2])
+
+        session = mock_neo4j_driver.session.return_value.__enter__.return_value
+
+        # Find the call to session.run that handles entities
+        entity_calls = []
+        for call_args in session.run.call_args_list:
+            # call_args is (args, kwargs)
+            kwargs = call_args[1]
+            if 'entities' in kwargs:
+                entity_calls.append(kwargs['entities'])
+
+        assert len(entity_calls) == 1, "Should have exactly one batch write for entities"
+
+        entities_batch = entity_calls[0]
+        # Current implementation sends both (len=2). Optimized should send one (len=1).
+        assert len(entities_batch) == 1, f"Expected 1 unique entity, but got {len(entities_batch)}"
+        assert entities_batch[0]['name'] == "CommonEntity"
+
 
 class TestRetryMechanism:
     """Test retry logic with tenacity."""
@@ -326,6 +356,29 @@ class TestRetryMechanism:
 
         with pytest.raises(Exception):
             await pipeline._process_chunk("Test text", 0)
+
+    def test_save_graph_retry_exhaustion(self, pipeline, mock_neo4j_driver):
+        """Test that _save_graph retries 3 times and raises exception on persistent failure."""
+        # Setup the mock to raise an exception
+        # Access the session context manager's session object
+        session_mock = mock_neo4j_driver.session.return_value.__enter__.return_value
+        session_mock.run.side_effect = Exception("Neo4j connection failed")
+
+        # Create a dummy KnowledgeGraph with data to trigger session.run
+        kg = KnowledgeGraph(
+            entities=[Entity(name="Test", type="TEST")],
+            relationships=[]
+        )
+
+        # We need to patch time.sleep to avoid waiting during retries
+        with patch('time.sleep'):
+            with pytest.raises(Exception, match="Neo4j connection failed"):
+                pipeline._save_graph([kg])
+
+        # stop_after_attempt(3) means 3 attempts total.
+        # Since session.run is mocked on the same session object (reused by context manager mock),
+        # the call count should accumulate.
+        assert session_mock.run.call_count == 3
 
 
 class TestVectorStoreWrites:
