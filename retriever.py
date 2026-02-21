@@ -24,6 +24,8 @@ from database import get_read_graph, get_vectorstore, get_async_read_graph
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+GRAPH_SEARCH_ERROR_MSG = "Graph search unavailable due to an internal error."
+
 
 SYNTHESIS_PROMPT = """You are a helpful AI assistant that answers questions based on provided context.
 
@@ -145,29 +147,24 @@ class HybridRetriever:
         Returns:
             Graph context as string
         """
-        try:
-            graph = self._get_neo4j_graph()
+        graph = self._get_neo4j_graph()
 
-            chain = GraphCypherQAChain.from_llm(
-                llm=self.llm,
-                graph=graph,
-                verbose=True,
-                return_intermediate_steps=True,
-                allow_dangerous_requests=False,
-                validate_cypher=True,
-            )
+        chain = GraphCypherQAChain.from_llm(
+            llm=self.llm,
+            graph=graph,
+            verbose=True,
+            return_intermediate_steps=True,
+            allow_dangerous_requests=False,
+            validate_cypher=True,
+        )
 
-            result = chain.invoke({"query": query})
+        result = chain.invoke({"query": query})
 
-            graph_context = result.get("result", "")
+        graph_context = result.get("result", "")
 
-            logger.info(f"Graph search completed")
+        logger.info(f"Graph search completed")
 
-            return graph_context
-
-        except Exception as e:
-            logger.exception("Graph search error")
-            return "Graph search unavailable due to an internal error."
+        return graph_context
 
     @retry(
         stop=stop_after_attempt(3),
@@ -265,6 +262,7 @@ class HybridRetriever:
                     return await self._graph_search(request.query)
                 except Exception:
                     logger.exception("Graph search failed")
+                    return GRAPH_SEARCH_ERROR_MSG
             return ""
 
         vector_context, graph_context = await asyncio.gather(
@@ -272,7 +270,7 @@ class HybridRetriever:
             _safe_graph_search()
         )
 
-        if not vector_context and not graph_context:
+        if not vector_context and (not graph_context or graph_context == GRAPH_SEARCH_ERROR_MSG):
             return QueryResponse(
                 answer="I couldn't find any relevant information to answer your question.",
                 vector_context=[],

@@ -3,9 +3,19 @@ Test suite for retrieval engine (retriever.py).
 Tests security, read-only access, fallback mechanisms, and Cypher injection protection.
 """
 
+import sys
+from unittest.mock import Mock, MagicMock, AsyncMock, patch
+
+# Mock external dependencies that might not be installed in the test environment
+sys.modules["langchain_google_genai"] = MagicMock()
+sys.modules["langchain_community.graphs"] = MagicMock()
+sys.modules["langchain.chains"] = MagicMock()
+sys.modules["langchain.prompts"] = MagicMock()
+sys.modules["neo4j"] = MagicMock()
+sys.modules["langchain_chroma"] = MagicMock()
+
 import pytest
 import asyncio
-from unittest.mock import Mock, MagicMock, AsyncMock, patch
 
 from retriever import HybridRetriever, query_graphrag
 from models import QueryRequest, QueryResponse
@@ -225,15 +235,31 @@ class TestGraphSearch:
             assert result == "Sync result"
 
     @pytest.mark.asyncio
-    async def test_graph_search_failure_graceful(self, retriever):
-        """Test that graph search failures are handled gracefully."""
+    async def test_graph_search_failure_raises(self, retriever):
+        """Test that graph search raises exception on failure (so retry works)."""
         with patch('retriever.GraphCypherQAChain.from_llm') as mock_chain_factory:
             mock_chain_factory.side_effect = Exception("Neo4j connection failed")
 
+            with pytest.raises(Exception):
+                await retriever._graph_search("test query")
+
+    @pytest.mark.asyncio
+    async def test_graph_search_retries(self, retriever):
+        """Test that graph search retries on failure."""
+        with patch('retriever.GraphCypherQAChain.from_llm') as mock_chain_factory:
+            # First attempt fails, second succeeds
+            mock_chain_fail = Mock()
+            mock_chain_fail.invoke.side_effect = Exception("Temporary failure")
+
+            mock_chain_success = Mock()
+            mock_chain_success.invoke.return_value = {"result": "Success"}
+
+            mock_chain_factory.side_effect = [mock_chain_fail, mock_chain_success]
+
             result = await retriever._graph_search("test query")
 
-            # Should return error message, not raise
-            assert "unavailable" in result.lower() or "error" in result.lower()
+            assert result == "Success"
+            assert mock_chain_factory.call_count == 2
 
 
 class TestGracefulDegradation:
