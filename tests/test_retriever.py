@@ -24,11 +24,13 @@ class TestReadOnlyAccess:
             retriever = HybridRetriever()
             # Store the mock for verification
             retriever._read_graph_mock = mock_read
-            return retriever
+            yield retriever
 
-    def test_uses_read_only_driver(self, retriever):
+    @pytest.mark.asyncio
+    async def test_uses_read_only_driver(self, retriever):
         """Verify that retriever requests READ-ONLY driver."""
         # Check that get_read_graph was called (not get_write_graph)
+        await retriever.get_graph_statistics()
         assert retriever._read_graph_mock.called
 
     @pytest.mark.asyncio
@@ -68,7 +70,7 @@ class TestCypherInjectionProtection:
              patch('retriever.Neo4jGraph', return_value=mock_neo4j_graph):
 
             retriever = HybridRetriever()
-            return retriever
+            yield retriever
 
     @pytest.mark.asyncio
     async def test_cypher_chain_has_validate_cypher(self, retriever, mock_neo4j_graph):
@@ -102,7 +104,7 @@ class TestCypherInjectionProtection:
     async def test_query_with_injection_attempts(self, retriever, malicious_inputs):
         """Test retrieval with various injection attempts."""
         with patch.object(retriever, '_vector_search', return_value=[]), \
-             patch.object(retriever, '_graph_search', return_value=""):
+             patch.object(retriever, '_graph_search', new_callable=AsyncMock, return_value=""):
 
             for name, malicious_string in malicious_inputs.items():
                 request = QueryRequest(query=malicious_string)
@@ -123,7 +125,7 @@ class TestVectorSearch:
              patch('retriever.ChatGoogleGenerativeAI'):
 
             retriever = HybridRetriever()
-            return retriever
+            yield retriever
 
     def test_vector_search_success(self, retriever, mock_vectorstore):
         """Test successful vector search."""
@@ -165,7 +167,7 @@ class TestGraphSearch:
              patch('retriever.Neo4jGraph', return_value=mock_neo4j_graph):
 
             retriever = HybridRetriever()
-            return retriever
+            yield retriever
 
     @pytest.mark.asyncio
     async def test_graph_search_success(self, retriever):
@@ -219,7 +221,7 @@ class TestGracefulDegradation:
             mock_openai.return_value = mock_llm
 
             retriever = HybridRetriever()
-            return retriever
+            yield retriever
 
     @pytest.mark.asyncio
     async def test_vector_failure_returns_graph_only(self, retriever):
@@ -310,7 +312,7 @@ class TestGraphStatistics:
              patch('retriever.ChatGoogleGenerativeAI'):
 
             retriever = HybridRetriever()
-            return retriever
+            yield retriever
 
     @pytest.mark.asyncio
     async def test_get_statistics_success(self, retriever, mock_neo4j_driver):
@@ -363,7 +365,7 @@ class TestEntitySearch:
              patch('retriever.ChatGoogleGenerativeAI'):
 
             retriever = HybridRetriever()
-            return retriever
+            yield retriever
 
     @pytest.mark.asyncio
     async def test_search_entities_success(self, retriever, mock_neo4j_driver):
