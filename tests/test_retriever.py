@@ -15,20 +15,38 @@ class TestReadOnlyAccess:
     """Test that retriever uses read-only database connections."""
 
     @pytest.fixture
-    def retriever(self, mock_neo4j_driver, mock_vectorstore):
+    def mock_async_driver(self):
+        """Create a mock for AsyncDriver."""
+        driver = MagicMock()
+        session = AsyncMock()
+
+        # Async session context manager
+        session.__aenter__.return_value = session
+        session.__aexit__.return_value = None
+
+        driver.session.return_value = session
+        driver.verify_connectivity = AsyncMock()
+        return driver
+
+    @pytest.fixture
+    def retriever(self, mock_neo4j_driver, mock_vectorstore, mock_async_driver):
         """Create retriever with mocked dependencies."""
         with patch('retriever.get_read_graph', return_value=mock_neo4j_driver) as mock_read, \
+             patch('retriever.get_async_read_graph', new_callable=AsyncMock, return_value=mock_async_driver) as mock_async_read, \
              patch('retriever.get_vectorstore', return_value=mock_vectorstore), \
              patch('retriever.ChatGoogleGenerativeAI'):
 
             retriever = HybridRetriever()
             # Store the mock for verification
             retriever._read_graph_mock = mock_read
+            retriever._async_read_graph_mock = mock_async_read
             yield retriever
 
     @pytest.mark.asyncio
     async def test_uses_read_only_driver(self, retriever):
         """Verify that retriever requests READ-ONLY driver."""
+        # Trigger lazy load
+        _ = retriever.read_driver
         # Check that get_read_graph was called (not get_write_graph)
         await retriever.get_graph_statistics()
         assert retriever._read_graph_mock.called
@@ -51,15 +69,17 @@ class TestReadOnlyAccess:
         assert mock_neo4j_driver.session.called
 
     @pytest.mark.asyncio
-    async def test_read_driver_in_entity_search(self, retriever, mock_neo4j_driver):
+    async def test_read_driver_in_entity_search(self, retriever, mock_async_driver):
         """Test that entity search uses read-only driver."""
-        session = mock_neo4j_driver.session.return_value.__enter__.return_value
-        session.run.return_value = []
+        session = mock_async_driver.session.return_value.__aenter__.return_value
+        mock_result = AsyncMock()
+        mock_result.data.return_value = []
+        session.run.return_value = mock_result
 
         results = await retriever.search_entities("test")
 
-        # Verify read driver session was created
-        assert mock_neo4j_driver.session.called
+        # Verify async read driver session was created
+        assert mock_async_driver.session.called
 
 
 class TestCypherInjectionProtection:
@@ -101,6 +121,8 @@ class TestCypherInjectionProtection:
     async def test_malicious_query_sanitization(self, retriever, malicious_inputs):
         """Test that malicious queries are sanitized before processing."""
         # Mock the graph search to return safely
+        # Note: _graph_search calls _graph_search_sync in executor.
+        # We patch _graph_search_sync to avoid Neo4j interaction
         with patch.object(retriever, '_graph_search_sync', return_value="Safe result"):
             request = QueryRequest(query=malicious_inputs["cypher_injection"])
 
@@ -368,9 +390,24 @@ class TestEntitySearch:
     """Test entity search functionality."""
 
     @pytest.fixture
-    def retriever(self, mock_neo4j_driver, mock_vectorstore):
+    def mock_async_driver(self):
+        """Create a mock for AsyncDriver."""
+        driver = MagicMock()
+        session = AsyncMock()
+
+        # Async session context manager
+        session.__aenter__.return_value = session
+        session.__aexit__.return_value = None
+
+        driver.session.return_value = session
+        driver.verify_connectivity = AsyncMock()
+        return driver
+
+    @pytest.fixture
+    def retriever(self, mock_neo4j_driver, mock_vectorstore, mock_async_driver):
         """Create retriever with mocked dependencies."""
         with patch('retriever.get_read_graph', return_value=mock_neo4j_driver), \
+             patch('retriever.get_async_read_graph', new_callable=AsyncMock, return_value=mock_async_driver) as mock_async_read, \
              patch('retriever.get_vectorstore', return_value=mock_vectorstore), \
              patch('retriever.ChatGoogleGenerativeAI'):
 
@@ -378,13 +415,18 @@ class TestEntitySearch:
             yield retriever
 
     @pytest.mark.asyncio
-    async def test_search_entities_success(self, retriever, mock_neo4j_driver):
+    async def test_search_entities_success(self, retriever, mock_async_driver):
         """Test successful entity search."""
-        session = mock_neo4j_driver.session.return_value.__enter__.return_value
+        session = mock_async_driver.session.return_value.__aenter__.return_value
 
         # Mock search results
-        mock_record = {"name": "OpenAI", "type": "ORGANIZATION", "description": "AI company"}
-        session.run.return_value = [mock_record]
+        mock_record = [{"name": "OpenAI", "type": "ORGANIZATION", "description": "AI company"}]
+
+        # session.run returns a result object
+        mock_result = AsyncMock()
+        mock_result.data.return_value = mock_record
+
+        session.run.return_value = mock_result
 
         results = await retriever.search_entities("OpenAI")
 
@@ -392,10 +434,13 @@ class TestEntitySearch:
         assert results[0]["name"] == "OpenAI"
 
     @pytest.mark.asyncio
-    async def test_search_entities_with_limit(self, retriever, mock_neo4j_driver):
+    async def test_search_entities_with_limit(self, retriever, mock_async_driver):
         """Test entity search with custom limit."""
-        session = mock_neo4j_driver.session.return_value.__enter__.return_value
-        session.run.return_value = []
+        session = mock_async_driver.session.return_value.__aenter__.return_value
+
+        mock_result = AsyncMock()
+        mock_result.data.return_value = []
+        session.run.return_value = mock_result
 
         await retriever.search_entities("test", limit=20)
 
@@ -404,9 +449,9 @@ class TestEntitySearch:
         assert call_args[1]["limit"] == 20
 
     @pytest.mark.asyncio
-    async def test_search_entities_failure(self, retriever, mock_neo4j_driver):
+    async def test_search_entities_failure(self, retriever, mock_async_driver):
         """Test that entity search failures are handled."""
-        session = mock_neo4j_driver.session.return_value.__enter__.return_value
+        session = mock_async_driver.session.return_value.__aenter__.return_value
         session.run.side_effect = Exception("Query failed")
 
         results = await retriever.search_entities("test")
