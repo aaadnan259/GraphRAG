@@ -76,3 +76,21 @@ def test_ingest_nested_invalid_extension():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Only .txt and .md files are supported"
+
+def test_ingest_schema_initialization_failure():
+    """Test failure during schema initialization."""
+    with patch("api.Ingestor") as mock_ingestor_class:
+        mock_ingestor = mock_ingestor_class.return_value
+        # Mock init_schema to raise an exception
+        mock_ingestor.init_schema.side_effect = Exception("Schema init failed")
+
+        file_content = b"This is a test content."
+        files = {"file": ("test.txt", file_content, "text/plain")}
+
+        response = client.post("/ingest", files=files)
+
+        assert response.status_code == 500
+        assert response.json()["detail"] == "An internal server error occurred during document ingestion."
+        mock_ingestor.init_schema.assert_called_once()
+        # Ensure ingest was NOT called because init_schema failed
+        mock_ingestor.ingest.assert_not_called()

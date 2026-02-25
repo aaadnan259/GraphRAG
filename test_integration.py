@@ -11,7 +11,7 @@ print("="*60)
 
 # Test 1: Configuration
 print("\n[1/5] Testing configuration...")
-print(f"  Google API Key: {config.google_api_key[:20]}...")
+print(f"  Google API Key: ******")
 print(f"  LLM Model: {config.llm_model}")
 print(f"  Embedding Model: {config.embedding_model}")
 print(f"  Neo4j URI: {config.neo4j_uri}")

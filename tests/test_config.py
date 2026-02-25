@@ -88,6 +88,8 @@ class TestConfig(unittest.TestCase):
             config = Config()
 
         # Now patch os.environ for the method call
+        # Note: _get_required_env still calls os.getenv internally, so patching os.environ works for this helper
+        # even if properties are cached. This tests the helper specifically.
         with patch.dict(os.environ, {"TEST_VAR": "value"}, clear=True):
             self.assertEqual(config._get_required_env("TEST_VAR"), "value")
 
@@ -100,6 +102,7 @@ class TestConfig(unittest.TestCase):
         with patch.dict(os.environ, self.required_env, clear=True):
             config = Config()
 
+        # Same note as above.
         with patch.dict(os.environ, {"TEST_VAR": "value"}, clear=True):
             self.assertEqual(config._get_optional_env("TEST_VAR", "default"), "value")
 
@@ -108,20 +111,24 @@ class TestConfig(unittest.TestCase):
 
     def test_allowed_origins_default(self):
         """Test default allowed origins when environment variable is not set."""
-        # Ensure ALLOWED_ORIGINS is not set
-        if "ALLOWED_ORIGINS" in os.environ:
-            del os.environ["ALLOWED_ORIGINS"]
+        env_vars = self.required_env.copy()
+        if "ALLOWED_ORIGINS" in env_vars:
+            del env_vars["ALLOWED_ORIGINS"]
 
-        # allowed_origins property reads env var dynamically
-        origins = global_config.allowed_origins
-        self.assertIn("http://localhost:5173", origins)
-        self.assertEqual(len(origins), 4)
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = Config()
+            origins = config.allowed_origins
+            self.assertIn("http://localhost:5173", origins)
+            self.assertEqual(len(origins), 4)
 
     def test_allowed_origins_override(self):
         """Test allowed origins override via environment variable."""
-        # Set env var
-        with patch.dict(os.environ, {"ALLOWED_ORIGINS": "http://foo.com,http://bar.com"}):
-            origins = global_config.allowed_origins
+        env_vars = self.required_env.copy()
+        env_vars["ALLOWED_ORIGINS"] = "http://foo.com,http://bar.com"
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = Config()
+            origins = config.allowed_origins
             self.assertEqual(origins, ["http://foo.com", "http://bar.com"])
 
     def test_max_file_size_default(self):
@@ -132,14 +139,12 @@ class TestConfig(unittest.TestCase):
 
     def test_max_file_size_override(self):
         """Test max file size override via environment variable."""
-        with patch.dict(os.environ, {"MAX_FILE_SIZE": "5242880"}, clear=True):
-             # We need to re-instantiate or patch because Config() reads env during init/property access
-             # The property reads env var dynamically, so patch.dict is enough if we use a new instance or if logic supports it.
-             # In this case, creating a new instance is safer given the test setup.
-             with patch.dict(os.environ, self.required_env, clear=True): # Ensure required vars exist
-                 with patch.dict(os.environ, {"MAX_FILE_SIZE": "5242880"}):
-                    config = Config()
-                    self.assertEqual(config.max_file_size, 5242880)
+        env_vars = self.required_env.copy()
+        env_vars["MAX_FILE_SIZE"] = "5242880"
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = Config()
+            self.assertEqual(config.max_file_size, 5242880)
 
 if __name__ == "__main__":
     unittest.main()
