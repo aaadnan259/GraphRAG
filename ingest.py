@@ -240,7 +240,8 @@ class Ingestor:
                 async for chunk in input_data:
                     yield chunk
 
-        buffer = ""
+        buffer_parts = []
+        current_buffer_size = 0
         # 5MB buffer size before processing
         BUFFER_SIZE = 5 * 1024 * 1024
         overlap_size = config.chunk_overlap
@@ -254,24 +255,32 @@ class Ingestor:
 
         try:
             async for chunk in get_iterator():
-                buffer += chunk
-                while len(buffer) >= BUFFER_SIZE:
-                    to_process = buffer
+                buffer_parts.append(chunk)
+                current_buffer_size += len(chunk)
+
+                if current_buffer_size >= BUFFER_SIZE:
+                    full_buffer = "".join(buffer_parts)
 
                     next_buffer_start = ""
-                    if overlap_size > 0 and len(buffer) > overlap_size:
-                        next_buffer_start = buffer[-overlap_size:]
+                    if overlap_size > 0 and len(full_buffer) > overlap_size:
+                        next_buffer_start = full_buffer[-overlap_size:]
 
-                    stats = await self._process_batch(to_process, doc_id, filename, total_chunks)
+                    stats = await self._process_batch(full_buffer, doc_id, filename, total_chunks)
 
                     total_chunks += stats["num_chunks"]
                     total_entities += stats["num_entities"]
                     total_relationships += stats["num_relationships"]
 
-                    buffer = next_buffer_start
-            
-            if buffer:
-                 stats = await self._process_batch(buffer, doc_id, filename, total_chunks)
+                    if next_buffer_start:
+                        buffer_parts = [next_buffer_start]
+                        current_buffer_size = len(next_buffer_start)
+                    else:
+                        buffer_parts = []
+                        current_buffer_size = 0
+
+            if buffer_parts:
+                 full_buffer = "".join(buffer_parts)
+                 stats = await self._process_batch(full_buffer, doc_id, filename, total_chunks)
                  total_chunks += stats["num_chunks"]
                  total_entities += stats["num_entities"]
                  total_relationships += stats["num_relationships"]
