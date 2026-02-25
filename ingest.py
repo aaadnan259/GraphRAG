@@ -246,14 +246,14 @@ class Ingestor:
         BUFFER_SIZE = 5 * 1024 * 1024
         overlap_size = config.chunk_overlap
 
-        if overlap_size >= BUFFER_SIZE:
-             raise ValueError(f"Chunk overlap ({overlap_size}) must be smaller than buffer size ({BUFFER_SIZE})")
-
         total_chunks = 0
         total_entities = 0
         total_relationships = 0
 
         try:
+            if overlap_size >= BUFFER_SIZE:
+                raise ValueError(f"Chunk overlap ({overlap_size}) must be smaller than buffer size ({BUFFER_SIZE})")
+
             async for chunk in get_iterator():
                 buffer_parts.append(chunk)
                 current_buffer_size += len(chunk)
