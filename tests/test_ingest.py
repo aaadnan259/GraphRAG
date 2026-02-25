@@ -475,3 +475,49 @@ class TestFullIngestionPipeline:
 
         assert result["success"] is False
         assert "error" in result
+
+
+class TestIngestConfigValidation:
+    """Test configuration validation for ingestion."""
+
+    @pytest.mark.asyncio
+    async def test_ingest_overlap_exceeds_buffer(self):
+        """Test failure when chunk overlap is larger than buffer size."""
+        with patch('ingest.get_write_graph'), \
+             patch('ingest.get_vectorstore'), \
+             patch('ingest.ChatGoogleGenerativeAI'), \
+             patch('ingest.config') as mock_config:
+
+            # Set overlap to 5MB + 1
+            BUFFER_SIZE = 5 * 1024 * 1024
+            mock_config.chunk_overlap = BUFFER_SIZE + 1
+            mock_config.chunk_size = 1000
+            mock_config.max_concurrent_llm_calls = 1
+
+            ingestor = Ingestor()
+            result = await ingestor.ingest("some text", "test.txt")
+
+            assert result['success'] is False
+            expected_msg = f"Chunk overlap ({mock_config.chunk_overlap}) must be smaller than buffer size ({BUFFER_SIZE})"
+            assert result['error'] == expected_msg
+
+    @pytest.mark.asyncio
+    async def test_ingest_overlap_equals_buffer(self):
+        """Test failure when chunk overlap is exactly equal to buffer size."""
+        with patch('ingest.get_write_graph'), \
+             patch('ingest.get_vectorstore'), \
+             patch('ingest.ChatGoogleGenerativeAI'), \
+             patch('ingest.config') as mock_config:
+
+            # Set overlap to 5MB
+            BUFFER_SIZE = 5 * 1024 * 1024
+            mock_config.chunk_overlap = BUFFER_SIZE
+            mock_config.chunk_size = 1000
+            mock_config.max_concurrent_llm_calls = 1
+
+            ingestor = Ingestor()
+            result = await ingestor.ingest("some text", "test.txt")
+
+            assert result['success'] is False
+            expected_msg = f"Chunk overlap ({BUFFER_SIZE}) must be smaller than buffer size ({BUFFER_SIZE})"
+            assert result['error'] == expected_msg
