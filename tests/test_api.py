@@ -46,7 +46,6 @@ def test_ingest_document(mock_ingestor):
     """Test document ingestion endpoint."""
     # Mock Ingestor methods
     mock_instance = mock_ingestor.return_value
-    mock_instance.init_schema = MagicMock()
     mock_instance.ingest = AsyncMock(return_value={
         "success": True,
         "document_id": "test-doc-id",
@@ -66,7 +65,6 @@ def test_ingest_document(mock_ingestor):
     assert data["success"] is True
     assert data["document_id"] == "test-doc-id"
 
-    mock_instance.init_schema.assert_called_once()
     mock_instance.ingest.assert_awaited_once()
 
 @patch("api.Ingestor")
@@ -81,7 +79,6 @@ def test_ingest_document_invalid_extension(mock_ingestor):
 def test_ingest_document_failure(mock_ingestor):
     """Test ingestion failure handling."""
     mock_instance = mock_ingestor.return_value
-    mock_instance.init_schema = MagicMock()
     mock_instance.ingest = AsyncMock(return_value={
         "success": False,
         "error": "Ingestion failed"
