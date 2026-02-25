@@ -4,7 +4,8 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from api import app, get_retriever
 from models import QueryRequest, QueryResponse
 
-client = TestClient(app)
+# Use raise_server_exceptions=False so that the global exception handler runs and returns JSON responses for 500s.
+client = TestClient(app, raise_server_exceptions=False)
 
 def test_root():
     """Test health check endpoint."""
@@ -47,24 +48,28 @@ def test_query_knowledge_graph():
     finally:
         app.dependency_overrides = {}
 
-@patch("api.HybridRetriever")
-def test_query_knowledge_graph_failure(mock_hybrid_retriever):
+def test_query_knowledge_graph_failure():
     """Test knowledge graph query endpoint failure."""
     # Mock retrieve method to raise an exception
-    mock_instance = mock_hybrid_retriever.return_value
+    mock_instance = MagicMock()
     mock_instance.retrieve = AsyncMock(side_effect=Exception("Retriever error"))
 
-    request_data = {
-        "query": "What is GraphRAG?",
-        "use_vector_search": True,
-        "use_graph_search": True
-    }
+    app.dependency_overrides[get_retriever] = lambda: mock_instance
 
-    response = client.post("/query", json=request_data)
+    try:
+        request_data = {
+            "query": "What is GraphRAG?",
+            "use_vector_search": True,
+            "use_graph_search": True
+        }
 
-    assert response.status_code == 500
-    data = response.json()
-    assert data["detail"] == "An internal server error occurred during query processing."
+        response = client.post("/query", json=request_data)
+
+        assert response.status_code == 500
+        data = response.json()
+        assert data["detail"] == "An internal server error occurred."
+    finally:
+        app.dependency_overrides = {}
 
 @patch("api.Ingestor")
 def test_ingest_document(mock_ingestor):
@@ -137,16 +142,20 @@ def test_get_graph_stats():
     finally:
         app.dependency_overrides = {}
 
-@patch("api.HybridRetriever")
-def test_get_graph_stats_failure(mock_hybrid_retriever):
+def test_get_graph_stats_failure():
     """Test graph statistics endpoint failure."""
-    mock_instance = mock_hybrid_retriever.return_value
+    mock_instance = MagicMock()
     mock_instance.get_graph_statistics = AsyncMock(side_effect=Exception("Database error"))
 
-    response = client.get("/stats")
+    app.dependency_overrides[get_retriever] = lambda: mock_instance
 
-    assert response.status_code == 500
-    assert response.json()["detail"] == "An internal server error occurred while fetching graph statistics."
+    try:
+        response = client.get("/stats")
+
+        assert response.status_code == 500
+        assert response.json()["detail"] == "An internal server error occurred."
+    finally:
+        app.dependency_overrides = {}
 
 def test_search_entities_success():
     """Test successful entity search."""
@@ -199,6 +208,6 @@ def test_search_entities_failure():
         response = client.get("/search/entities?query=test")
 
         assert response.status_code == 500
-        assert "An internal server error occurred during entity search." in response.json()["detail"]
+        assert "An internal server error occurred" in response.json()["detail"]
     finally:
         app.dependency_overrides = {}

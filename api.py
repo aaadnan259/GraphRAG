@@ -13,6 +13,7 @@ from functools import lru_cache
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from config import config
@@ -87,6 +88,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler for unhandled exceptions."""
+    logger.exception("Global exception handler caught: %s", exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal server error occurred."}
+    )
+
 
 @app.get("/")
 async def root():
@@ -108,15 +118,8 @@ async def query_knowledge_graph(
     """
     Process a user query using hybrid retrieval (Vector + Graph).
     """
-    try:
-        response = await retriever.retrieve(request)
-        return response
-    except Exception as e:
-        logger.exception("Query failed")
-        raise HTTPException(
-            status_code=500,
-            detail="An internal server error occurred during query processing."
-        )
+    response = await retriever.retrieve(request)
+    return response
 
 
 @app.post("/ingest")
@@ -124,46 +127,37 @@ async def ingest_document(file: UploadFile = File(...)):
     """
     Ingest a document (text or markdown) into the knowledge graph.
     """
-    try:
-        # Validate file type
-        if not file.filename.endswith((".txt", ".md")):
-             raise HTTPException(status_code=400, detail="Only .txt and .md files are supported")
+    # Validate file type
+    if not file.filename.endswith((".txt", ".md")):
+        raise HTTPException(status_code=400, detail="Only .txt and .md files are supported")
 
-        async def file_generator(file: UploadFile) -> AsyncIterator[str]:
-            decoder = codecs.getincrementaldecoder("utf-8")(errors="strict")
-            total_size = 0
-            CHUNK_SIZE = 1024 * 1024  # 1MB
+    async def file_generator(file: UploadFile) -> AsyncIterator[str]:
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="strict")
+        total_size = 0
+        CHUNK_SIZE = 1024 * 1024  # 1MB
 
-            while True:
-                chunk = await file.read(CHUNK_SIZE)
-                if not chunk:
-                    break
-                total_size += len(chunk)
-                if total_size > config.max_file_size:
-                    raise ValueError(f"File too large. Maximum size is {config.max_file_size} bytes")
-                yield decoder.decode(chunk, final=False)
+        while True:
+            chunk = await file.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            total_size += len(chunk)
+            if total_size > config.max_file_size:
+                raise ValueError(f"File too large. Maximum size is {config.max_file_size} bytes")
+            yield decoder.decode(chunk, final=False)
 
-            yield decoder.decode(b"", final=True)
+        yield decoder.decode(b"", final=True)
 
-        ingestor = Ingestor()
-        result = await ingestor.ingest(file_generator(file), file.filename)
-        
-        if not result["success"]:
-            error_msg = result.get("error", "Unknown ingestion error")
-            if "File too large" in error_msg:
-                 raise HTTPException(status_code=413, detail=error_msg)
-            raise HTTPException(status_code=500, detail=error_msg)
+    ingestor = Ingestor()
 
-        return result
+    result = await ingestor.ingest(file_generator(file), file.filename)
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Ingestion failed")
-        raise HTTPException(
-            status_code=500,
-            detail="An internal server error occurred during document ingestion."
-        )
+    if not result["success"]:
+        error_msg = result.get("error", "Unknown ingestion error")
+        if "File too large" in error_msg:
+            raise HTTPException(status_code=413, detail=error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
+
+    return result
 
 
 @app.get("/stats")
@@ -171,15 +165,8 @@ async def get_graph_stats(retriever: HybridRetriever = Depends(get_retriever)):
     """
     Retrieve statistics about the knowledge graph.
     """
-    try:
-        stats = await retriever.get_graph_statistics()
-        return stats
-    except Exception as e:
-        logger.exception("Stats fetch failed")
-        raise HTTPException(
-            status_code=500,
-            detail="An internal server error occurred while fetching graph statistics."
-        )
+    stats = await retriever.get_graph_statistics()
+    return stats
 
 
 @app.get("/search/entities")
@@ -191,12 +178,5 @@ async def search_entities(
     """
     Search for entities in the graph by name.
     """
-    try:
-        entities = await retriever.search_entities(query, limit)
-        return {"entities": entities}
-    except Exception as e:
-        logger.exception("Entity search failed")
-        raise HTTPException(
-            status_code=500,
-            detail="An internal server error occurred during entity search."
-        )
+    entities = await retriever.search_entities(query, limit)
+    return {"entities": entities}
