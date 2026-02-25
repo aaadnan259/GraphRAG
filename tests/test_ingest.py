@@ -475,3 +475,54 @@ class TestFullIngestionPipeline:
 
         assert result["success"] is False
         assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_ingest_async_iterator_buffering(self, pipeline):
+        """Test that async iterator correctly buffers data > 5MB."""
+        # Mock _process_batch to verify it is called with accumulated data
+        pipeline._process_batch = AsyncMock(return_value={
+            "num_chunks": 1,
+            "num_entities": 0,
+            "num_relationships": 0
+        })
+
+        # 5MB + epsilon to trigger buffer processing
+        # internal BUFFER_SIZE is 5 * 1024 * 1024 bytes
+        chunk_size = 1024
+        target_size = (5 * 1024 * 1024) + (100 * 1024)  # 5MB + 100KB
+        num_chunks = target_size // chunk_size
+
+        async def data_generator():
+            for i in range(num_chunks):
+                yield "a" * chunk_size
+            yield "b" * 100
+
+        filename = "test_iterator.txt"
+
+        # Execute ingest
+        result = await pipeline.ingest(data_generator(), filename)
+
+        assert result["success"] is True
+        assert result["num_chunks"] > 0
+
+        # Verify buffering behavior
+        assert pipeline._process_batch.call_count >= 1
+
+        first_call_args = pipeline._process_batch.call_args_list[0]
+        first_batch_text = first_call_args[0][0]  # text is first arg
+        assert len(first_batch_text) >= 5 * 1024 * 1024
+
+    @pytest.mark.asyncio
+    async def test_ingest_async_iterator_error(self, pipeline):
+        """Test error handling when async iterator raises exception."""
+        async def failing_generator():
+            yield "some data"
+            raise ValueError("Iterator failed mid-stream")
+
+        filename = "test_error.txt"
+
+        result = await pipeline.ingest(failing_generator(), filename)
+
+        # Should catch exception and return error dict
+        assert result["success"] is False
+        assert "Ingestion failed" in result["error"] or "Iterator failed mid-stream" in result["error"]
