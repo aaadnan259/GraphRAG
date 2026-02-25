@@ -9,6 +9,8 @@ import logging
 import codecs
 from typing import AsyncIterator
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -21,7 +23,22 @@ from retriever import HybridRetriever
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="GraphRAG API", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("Starting up...")
+    try:
+        Ingestor().init_schema()
+        logger.info("Schema initialized.")
+    except Exception as e:
+        logger.error(f"Schema initialization failed: {e}")
+
+    yield
+
+    # Shutdown
+    logger.info("Shutting down...")
+
+app = FastAPI(title="GraphRAG API", version="1.0.0", lifespan=lifespan)
 
 # CORS Configuration
 app.add_middleware(
@@ -83,8 +100,6 @@ async def ingest_document(file: UploadFile = File(...)):
             yield decoder.decode(b"", final=True)
 
         ingestor = Ingestor()
-        # Ensure schema exists before ingesting
-        ingestor.init_schema()
         
         result = await ingestor.ingest(file_generator(file), file.filename)
         

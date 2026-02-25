@@ -57,6 +57,29 @@ def test_ingest_invalid_extension():
     assert response.status_code == 400
     assert response.json()["detail"] == "Only .txt and .md files are supported"
 
+def test_ingest_no_init_schema_call():
+    """Test that init_schema is NOT called during ingestion (optimization)."""
+    with patch("api.Ingestor") as mock_ingestor_class:
+        mock_ingestor = mock_ingestor_class.return_value
+        mock_ingestor.ingest = AsyncMock(return_value={
+            "success": True,
+            "num_entities": 1,
+            "num_relationships": 1,
+            "filename": "test.txt",
+            "document_id": "123"
+        })
+        # We need to ensure init_schema is mocked to track calls
+        mock_ingestor.init_schema = MagicMock()
+
+        file_content = b"This is a test content."
+        files = {"file": ("test.txt", file_content, "text/plain")}
+
+        response = client.post("/ingest", files=files)
+
+        assert response.status_code == 200
+        # Assert init_schema was NOT called
+        mock_ingestor.init_schema.assert_not_called()
+
 def test_ingest_no_extension():
     """Test ingestion with a file having no extension."""
     file_content = b"Some content"
