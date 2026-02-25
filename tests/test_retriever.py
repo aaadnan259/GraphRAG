@@ -101,7 +101,7 @@ class TestCypherInjectionProtection:
         with patch('retriever.get_read_graph', return_value=mock_neo4j_driver), \
              patch('retriever.get_vectorstore', return_value=mock_vectorstore), \
              patch('retriever.ChatGoogleGenerativeAI'), \
-             patch('retriever.Neo4jGraph', return_value=mock_neo4j_graph):
+             patch('retriever.get_neo4j_graph', return_value=mock_neo4j_graph):
 
             retriever = HybridRetriever()
             yield retriever
@@ -206,7 +206,7 @@ class TestGraphSearch:
         with patch('retriever.get_read_graph', return_value=mock_neo4j_driver), \
              patch('retriever.get_vectorstore', return_value=mock_vectorstore), \
              patch('retriever.ChatGoogleGenerativeAI'), \
-             patch('retriever.Neo4jGraph', return_value=mock_neo4j_graph):
+             patch('retriever.get_neo4j_graph', return_value=mock_neo4j_graph):
 
             retriever = HybridRetriever()
             yield retriever

@@ -19,7 +19,7 @@ from tenacity import (
 
 from config import config
 from models import QueryRequest, QueryResponse
-from database import get_read_graph, get_vectorstore, get_async_read_graph
+from database import get_read_graph, get_vectorstore, get_async_read_graph, get_neo4j_graph
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -75,12 +75,7 @@ class HybridRetriever:
     def _get_neo4j_graph(self) -> Neo4jGraph:
         """Get or create Neo4j graph wrapper with READ-ONLY credentials."""
         if self._neo4j_graph is None:
-            logger.info("Initializing Neo4j graph with READ-ONLY credentials")
-            self._neo4j_graph = Neo4jGraph(
-                url=config.neo4j_uri,
-                username=config.neo4j_ro_user,
-                password=config.neo4j_ro_password,
-            )
+            self._neo4j_graph = get_neo4j_graph()
         return self._neo4j_graph
 
     def _vector_search_sync(self, query: str, k: int = None) -> List[str]:

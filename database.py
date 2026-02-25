@@ -6,6 +6,7 @@ import logging
 from typing import Optional
 from neo4j import GraphDatabase, Driver, AsyncGraphDatabase, AsyncDriver
 from langchain_chroma import Chroma
+from langchain_community.graphs import Neo4jGraph
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from config import config
 
@@ -179,6 +180,18 @@ async def get_async_read_graph() -> AsyncDriver:
     This connection uses NEO4J_RO_USER credentials.
     """
     return await AsyncNeo4jConnectionManager.get_read_driver()
+
+
+def get_neo4j_graph() -> Neo4jGraph:
+    """
+    Get or create Neo4j graph wrapper for LangChain with READ-ONLY credentials.
+    """
+    logger.info("Initializing Neo4j graph wrapper with READ-ONLY credentials")
+    return Neo4jGraph(
+        url=config.neo4j_uri,
+        username=config.neo4j_ro_user,
+        password=config.neo4j_ro_password,
+    )
 
 
 def get_vectorstore() -> Chroma:
