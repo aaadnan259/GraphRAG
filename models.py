@@ -49,7 +49,7 @@ RELATION_MAPPING = {
 }
 
 
-def sanitize_text(text: str) -> str:
+def sanitize_text(text: str, max_length: int = 500) -> str:
     """Sanitize text input to prevent injection attacks."""
     if not text:
         return ""
@@ -58,7 +58,7 @@ def sanitize_text(text: str) -> str:
     text = re.sub(r'[^\w\s\-.,!?]', '', text)
     # Remove double-dash SQL comment operator
     text = re.sub(r'--+', '', text)
-    text = text[:500]
+    text = text[:max_length]
     return text
 
 
@@ -91,11 +91,7 @@ class Entity(BaseModel):
         """Sanitize all text fields (includes length truncation)."""
         if v is None:
             return None
-        sanitized = sanitize_text(v)
-        # Enforce max lengths after sanitization
-        if cls.model_fields.get('name') and v == sanitized:
-            return sanitized[:500]
-        return sanitized
+        return sanitize_text(v)
 
     @field_validator('type')
     @classmethod
@@ -119,8 +115,7 @@ class Relationship(BaseModel):
         """Sanitize all text fields (includes length truncation)."""
         if v is None:
             return None
-        sanitized = sanitize_text(v)
-        return sanitized[:500]  # Enforce max length
+        return sanitize_text(v)
 
     @field_validator('relation_type')
     @classmethod
@@ -175,8 +170,7 @@ class DocumentMetadata(BaseModel):
     @classmethod
     def sanitize_metadata(cls, v: str) -> str:
         """Sanitize metadata fields (includes length truncation)."""
-        sanitized = sanitize_text(v)
-        return sanitized[:500]  # Enforce max length
+        return sanitize_text(v)
 
 
 class QueryRequest(BaseModel):
@@ -190,9 +184,8 @@ class QueryRequest(BaseModel):
     @classmethod
     def sanitize_query(cls, v: str) -> str:
         """Sanitize user query (includes length truncation)."""
-        sanitized = sanitize_text(v)
         # Allow longer queries but still enforce reasonable limit
-        return sanitized[:2000]  # Enforce max length
+        return sanitize_text(v, max_length=2000)
 
 
 class QueryResponse(BaseModel):
