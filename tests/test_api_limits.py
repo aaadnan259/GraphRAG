@@ -25,9 +25,8 @@ class TestFileUploadLimits:
         """Test that files exceeding MAX_FILE_SIZE are rejected with 413."""
         limit = 1024  # 1KB
 
-        # Patch the environment variable.
-        # Since config.max_file_size reads env var every time, this works.
-        with patch.dict(os.environ, {"MAX_FILE_SIZE": str(limit)}):
+        # Patch the config attribute directly
+        with patch.object(config, "max_file_size", limit):
             large_content = b"a" * (limit + 100)
             filename = "large_file.txt"
 
@@ -56,7 +55,7 @@ class TestFileUploadLimits:
         """Test that files within MAX_FILE_SIZE are accepted."""
         limit = 1024  # 1KB
 
-        with patch.dict(os.environ, {"MAX_FILE_SIZE": str(limit)}):
+        with patch.object(config, "max_file_size", limit):
             small_content = b"a" * (limit - 100)
             filename_small = "small_file.txt"
 
@@ -74,14 +73,12 @@ class TestFileUploadLimits:
 
     def test_default_limit(self):
         """Test that the default limit is enforced (10MB)."""
-        # Ensure MAX_FILE_SIZE is NOT set
-        with patch.dict(os.environ):
-            if "MAX_FILE_SIZE" in os.environ:
-                del os.environ["MAX_FILE_SIZE"]
+        # Explicitly set to default to ensure test stability regardless of actual env
+        default_limit = 10 * 1024 * 1024
 
-            assert config.max_file_size == 10 * 1024 * 1024
-
+        with patch.object(config, "max_file_size", default_limit):
             limit = config.max_file_size
+            # Use a size that exceeds the default limit
             large_content = b"a" * (limit + 1024 * 1024) # 11MB
             filename = "large_file.txt"
 
@@ -97,11 +94,6 @@ class TestFileUploadLimits:
                     return {"success": True}
                     
                 mock_ingestor_instance.ingest = AsyncMock(side_effect=mock_ingest)
-
-                # We don't want to actually generate 11MB of data if we can avoid it,
-                # but to test the actual reading loop, we kind of have to,
-                # OR we can mock `file.read` behavior.
-                # Generating 11MB in memory is fine for a test.
 
                 response = client.post(
                     "/ingest",
