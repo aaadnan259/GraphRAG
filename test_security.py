@@ -15,7 +15,7 @@ def test_configuration():
     print("=" * 60)
 
     try:
-        print(f"✓ Google API Key: {config.google_api_key[:10]}...")
+        print(f"✓ Google API Key: ******")
         print(f"✓ Neo4j URI: {config.neo4j_uri}")
         print(f"✓ Neo4j RW User: {config.neo4j_rw_user}")
         print(f"✓ Neo4j RO User: {config.neo4j_ro_user}")
