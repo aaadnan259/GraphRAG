@@ -41,6 +41,25 @@ def test_query_knowledge_graph(mock_hybrid_retriever):
 
     mock_instance.retrieve.assert_awaited_once()
 
+@patch("api.HybridRetriever")
+def test_query_knowledge_graph_failure(mock_hybrid_retriever):
+    """Test knowledge graph query endpoint failure."""
+    # Mock retrieve method to raise an exception
+    mock_instance = mock_hybrid_retriever.return_value
+    mock_instance.retrieve = AsyncMock(side_effect=Exception("Retriever error"))
+
+    request_data = {
+        "query": "What is GraphRAG?",
+        "use_vector_search": True,
+        "use_graph_search": True
+    }
+
+    response = client.post("/query", json=request_data)
+
+    assert response.status_code == 500
+    data = response.json()
+    assert data["detail"] == "An internal server error occurred during query processing."
+
 @patch("api.Ingestor")
 def test_ingest_document(mock_ingestor):
     """Test document ingestion endpoint."""
