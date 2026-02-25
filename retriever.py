@@ -7,9 +7,9 @@ import logging
 from typing import List, Dict, Any, Optional
 
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.graphs import Neo4jGraph
-from langchain.chains import GraphCypherQAChain
+from langchain_community.chains.graph_qa.cypher import GraphCypherQAChain
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -336,13 +336,7 @@ class HybridRetriever:
 
         except Exception as e:
             logger.exception("Error fetching graph statistics")
-            return {
-                "error": "An internal error occurred while fetching graph statistics.",
-                "total_entities": 0,
-                "total_relationships": 0,
-                "entity_types": {},
-                "relationship_types": {},
-            }
+            raise
 
     async def get_graph_statistics(self) -> Dict[str, Any]:
         """

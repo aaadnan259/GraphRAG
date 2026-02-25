@@ -101,7 +101,7 @@ def benchmark():
         try:
             retriever = HybridRetriever()
             # Ensure the read_driver is our mock
-            retriever.read_driver = mock_driver
+            retriever._read_driver = mock_driver
 
             print("Running retrieval...")
             start_time = time.time()
