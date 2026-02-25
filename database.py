@@ -6,6 +6,7 @@ import logging
 from typing import Optional
 from neo4j import GraphDatabase, Driver, AsyncGraphDatabase, AsyncDriver
 from langchain_chroma import Chroma
+from langchain_community.graphs import Neo4jGraph
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from config import config
 
@@ -181,6 +182,18 @@ async def get_async_read_graph() -> AsyncDriver:
     return await AsyncNeo4jConnectionManager.get_read_driver()
 
 
+def get_neo4j_graph() -> Neo4jGraph:
+    """
+    Get or create Neo4j graph wrapper for LangChain with READ-ONLY credentials.
+    """
+    logger.info("Initializing Neo4j graph wrapper with READ-ONLY credentials")
+    return Neo4jGraph(
+        url=config.neo4j_uri,
+        username=config.neo4j_ro_user,
+        password=config.neo4j_ro_password,
+    )
+
+
 def get_vectorstore() -> Chroma:
     """Get ChromaDB vector store."""
     return ChromaDBManager.get_vectorstore()
@@ -217,22 +230,6 @@ def initialize_neo4j_schema(driver: Driver) -> None:
     logger.info("Neo4j schema initialization complete")
 
 
-def verify_read_only_permissions(driver: Driver) -> bool:
-    """
-    Verify that the read-only user cannot perform write operations.
-    Returns True if properly restricted, False otherwise.
-    """
-    logger.info("Verifying read-only permissions...")
-
-    with driver.session() as session:
-        try:
-            session.run("CREATE (test:TestNode {name: 'security_check'})")
-            session.run("MATCH (test:TestNode {name: 'security_check'}) DELETE test")
-            logger.error("SECURITY VIOLATION: Read-only user can perform write operations!")
-            return False
-        except Exception as e:
-            logger.info(f"Read-only verification passed: {e}")
-            return True
 
 async def close_all_async_connections() -> None:
     """Close all async database connections."""

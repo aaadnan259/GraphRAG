@@ -7,22 +7,76 @@ Handles API requests for querying, ingestion, and graph statistics.
 import logging
 
 import codecs
+from contextlib import asynccontextmanager
 from typing import AsyncIterator
 from functools import lru_cache
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from config import config
 from models import QueryRequest, QueryResponse
 from ingest import Ingestor
 from retriever import HybridRetriever
+from database import close_all_connections, close_all_async_connections
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="GraphRAG API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Handle application startup and shutdown events.
+    """
+    # Startup: Initialize Neo4j schema
+    try:
+        logger.info("Initializing Neo4j schema at startup...")
+        ingestor = Ingestor()
+        ingestor.init_schema()
+        logger.info("Schema initialization successful.")
+    except Exception as e:
+        logger.error(f"Failed to initialize schema at startup: {e}")
+
+    yield
+
+    # Shutdown: Close database connections
+    logger.info("Shutting down: closing database connections...")
+    close_all_connections()
+    await close_all_async_connections()
+
+
+app = FastAPI(
+    title="GraphRAG API",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Middleware to add security headers to all responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        """Dispatch the request and add security headers."""
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # Content Security Policy (adjust as needed for frontend requirements)
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "img-src 'self' data:; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline';"
+        )
+        return response
+
+
+# Add Security Headers Middleware
+app.add_middleware(SecurityHeadersMiddleware)
 
 # CORS Configuration
 app.add_middleware(
@@ -92,9 +146,6 @@ async def ingest_document(file: UploadFile = File(...)):
             yield decoder.decode(b"", final=True)
 
         ingestor = Ingestor()
-        # Ensure schema exists before ingesting
-        ingestor.init_schema()
-        
         result = await ingestor.ingest(file_generator(file), file.filename)
         
         if not result["success"]:
