@@ -9,8 +9,9 @@ import logging
 import codecs
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
+from functools import lru_cache
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Request
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -93,13 +94,21 @@ async def root():
     return {"status": "ok", "service": "GraphRAG API"}
 
 
+@lru_cache()
+def get_retriever() -> HybridRetriever:
+    """Get or create a singleton HybridRetriever instance."""
+    return HybridRetriever()
+
+
 @app.post("/query", response_model=QueryResponse)
-async def query_knowledge_graph(request: QueryRequest):
+async def query_knowledge_graph(
+    request: QueryRequest,
+    retriever: HybridRetriever = Depends(get_retriever)
+):
     """
     Process a user query using hybrid retrieval (Vector + Graph).
     """
     try:
-        retriever = HybridRetriever()
         response = await retriever.retrieve(request)
         return response
     except Exception as e:
@@ -158,12 +167,11 @@ async def ingest_document(file: UploadFile = File(...)):
 
 
 @app.get("/stats")
-async def get_graph_stats():
+async def get_graph_stats(retriever: HybridRetriever = Depends(get_retriever)):
     """
     Retrieve statistics about the knowledge graph.
     """
     try:
-        retriever = HybridRetriever()
         stats = await retriever.get_graph_statistics()
         return stats
     except Exception as e:
@@ -175,12 +183,15 @@ async def get_graph_stats():
 
 
 @app.get("/search/entities")
-async def search_entities(query: str, limit: int = 10):
+async def search_entities(
+    query: str,
+    limit: int = 10,
+    retriever: HybridRetriever = Depends(get_retriever)
+):
     """
     Search for entities in the graph by name.
     """
     try:
-        retriever = HybridRetriever()
         entities = await retriever.search_entities(query, limit)
         return {"entities": entities}
     except Exception as e:
