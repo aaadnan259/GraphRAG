@@ -380,6 +380,23 @@ class TestRetryMechanism:
         # the call count should accumulate.
         assert session_mock.run.call_count == 3
 
+    def test_save_vectors_retry_exhaustion(self, pipeline, mock_vectorstore):
+        """Test that _save_vectors retries 3 times and raises exception on persistent failure."""
+        # Setup the mock to raise an exception
+        mock_vectorstore.add_documents.side_effect = Exception("Vector store connection failed")
+
+        chunks = ["Chunk 1"]
+        doc_id = "doc-123"
+        fname = "test.txt"
+
+        # We need to patch time.sleep to avoid waiting during retries
+        with patch('time.sleep'):
+            with pytest.raises(Exception, match="Vector store connection failed"):
+                pipeline._save_vectors(chunks, doc_id, fname)
+
+        # stop_after_attempt(3) means 3 attempts total.
+        assert mock_vectorstore.add_documents.call_count == 3
+
 
 class TestVectorStoreWrites:
     """Test vector store write operations."""
