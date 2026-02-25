@@ -24,7 +24,13 @@ mock_tenacity.wait_exponential = MagicMock()
 mock_tenacity.retry_if_exception_type = MagicMock()
 sys.modules['tenacity'] = mock_tenacity
 
-# No need to mock pydantic as it is installed
+# Mock pydantic
+mock_pydantic = MagicMock()
+mock_pydantic.BaseModel = MagicMock
+mock_pydantic.Field = MagicMock
+mock_pydantic.field_validator = passthrough_decorator
+sys.modules['pydantic'] = mock_pydantic
+
 sys.modules['fastapi'] = MagicMock()
 
 import pytest
