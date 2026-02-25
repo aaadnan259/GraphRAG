@@ -43,7 +43,6 @@ class TestFileUploadLimits:
                     return {"success": True}
                     
                 mock_ingestor_instance.ingest = AsyncMock(side_effect=mock_ingest)
-                mock_ingestor_instance.init_schema = MagicMock()
 
                 response = client.post(
                     "/ingest",
@@ -64,7 +63,6 @@ class TestFileUploadLimits:
             with patch("api.Ingestor") as MockIngestor:
                 mock_ingestor_instance = MockIngestor.return_value
                 mock_ingestor_instance.ingest = AsyncMock(return_value={"success": True})
-                mock_ingestor_instance.init_schema = MagicMock()
 
                 response = client.post(
                     "/ingest",
@@ -99,7 +97,6 @@ class TestFileUploadLimits:
                     return {"success": True}
                     
                 mock_ingestor_instance.ingest = AsyncMock(side_effect=mock_ingest)
-                mock_ingestor_instance.init_schema = MagicMock()
 
                 # We don't want to actually generate 11MB of data if we can avoid it,
                 # but to test the actual reading loop, we kind of have to,
