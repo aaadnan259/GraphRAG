@@ -23,8 +23,7 @@ from database import (
     get_read_graph,
     get_vectorstore,
     close_all_connections,
-    initialize_neo4j_schema,
-    verify_read_only_permissions
+    initialize_neo4j_schema
 )
 from config import config
 
@@ -288,28 +287,3 @@ class TestHelperFunctions:
 
         assert mock_session.run.called
 
-    def test_verify_read_only_permissions_success(self):
-        """Test verification when permission is denied (successful RO check)."""
-        mock_driver = MagicMock()
-        mock_session = MagicMock()
-        mock_driver.session.return_value.__enter__.return_value = mock_session
-
-        # Simulate exception when trying to write (Good behavior for RO user)
-        mock_session.run.side_effect = Exception("ClientError: Permission denied")
-
-        result = verify_read_only_permissions(mock_driver)
-
-        assert result is True
-
-    def test_verify_read_only_permissions_failure(self):
-        """Test verification when write succeeds (failure of RO check)."""
-        mock_driver = MagicMock()
-        mock_session = MagicMock()
-        mock_driver.session.return_value.__enter__.return_value = mock_session
-
-        # Simulate successful write (Bad behavior for RO user)
-        mock_session.run.return_value = None
-
-        result = verify_read_only_permissions(mock_driver)
-
-        assert result is False

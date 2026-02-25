@@ -217,22 +217,6 @@ def initialize_neo4j_schema(driver: Driver) -> None:
     logger.info("Neo4j schema initialization complete")
 
 
-def verify_read_only_permissions(driver: Driver) -> bool:
-    """
-    Verify that the read-only user cannot perform write operations.
-    Returns True if properly restricted, False otherwise.
-    """
-    logger.info("Verifying read-only permissions...")
-
-    with driver.session() as session:
-        try:
-            session.run("CREATE (test:TestNode {name: 'security_check'})")
-            session.run("MATCH (test:TestNode {name: 'security_check'}) DELETE test")
-            logger.error("SECURITY VIOLATION: Read-only user can perform write operations!")
-            return False
-        except Exception as e:
-            logger.info(f"Read-only verification passed: {e}")
-            return True
 
 async def close_all_async_connections() -> None:
     """Close all async database connections."""

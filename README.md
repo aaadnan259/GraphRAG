@@ -200,7 +200,7 @@ Streamlit web interface:
 2. **Rotate credentials regularly** - especially API keys
 3. **Use strong passwords** - for database users
 4. **Monitor API usage** - track OpenAI API costs
-5. **Validate read-only user** - use `verify_read_only_permissions()`
+5. **Validate read-only user** - Run `python test_security.py` to verify permissions.
 6. **Review Cypher queries** - ensure no dynamic query construction from user input
 
 ## Troubleshooting
