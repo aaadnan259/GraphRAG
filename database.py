@@ -6,6 +6,7 @@ import logging
 from typing import Optional
 from neo4j import GraphDatabase, Driver, AsyncGraphDatabase, AsyncDriver
 from langchain_chroma import Chroma
+from langchain_community.graphs import Neo4jGraph
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from config import config
 
@@ -121,6 +122,31 @@ class AsyncNeo4jConnectionManager:
             logger.info("Neo4j Async READ driver closed")
 
 
+class Neo4jGraphManager:
+    """Singleton manager for LangChain Neo4jGraph wrapper."""
+
+    _instance: Optional[Neo4jGraph] = None
+
+    @classmethod
+    def get_graph(cls) -> Neo4jGraph:
+        """Get or create the Neo4jGraph singleton."""
+        if cls._instance is None:
+            logger.info("Initializing Neo4jGraph wrapper with READ-ONLY credentials")
+            cls._instance = Neo4jGraph(
+                url=config.neo4j_uri,
+                username=config.neo4j_ro_user,
+                password=config.neo4j_ro_password,
+            )
+        return cls._instance
+
+    @classmethod
+    def close(cls) -> None:
+        """Close the graph connection (if possible)."""
+        # Neo4jGraph doesn't expose a public close method, but relies on driver.
+        # Since we don't own the driver, we let it be collected or handled by the process.
+        cls._instance = None
+
+
 class ChromaDBManager:
     """Singleton manager for ChromaDB vector store."""
 
@@ -162,6 +188,14 @@ def get_write_graph() -> Driver:
     This connection uses NEO4J_RW_USER credentials.
     """
     return Neo4jConnectionManager.get_write_driver()
+
+
+def get_neo4j_graph() -> Neo4jGraph:
+    """
+    Get Neo4jGraph wrapper for LangChain operations.
+    Uses READ-ONLY credentials.
+    """
+    return Neo4jGraphManager.get_graph()
 
 
 def get_read_graph() -> Driver:
