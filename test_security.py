@@ -5,7 +5,7 @@ Verifies that read-only user permissions are properly configured.
 
 import sys
 from config import config, ConfigurationError
-from database import verify_read_only_permissions, get_read_graph, get_write_graph
+from database import get_read_graph, get_write_graph
 
 
 def test_configuration():
@@ -15,7 +15,7 @@ def test_configuration():
     print("=" * 60)
 
     try:
-        print(f"✓ Google API Key: {config.google_api_key[:10]}...")
+        print(f"✓ Google API Key: ******")
         print(f"✓ Neo4j URI: {config.neo4j_uri}")
         print(f"✓ Neo4j RW User: {config.neo4j_rw_user}")
         print(f"✓ Neo4j RO User: {config.neo4j_ro_user}")
@@ -61,17 +61,21 @@ def test_read_only_permissions():
 
     try:
         read_driver = get_read_graph()
-        result = verify_read_only_permissions(read_driver)
 
-        if result:
-            print("\n✓ Read-only permissions PASSED")
-            print("  The read-only user is properly restricted from write operations.\n")
-            return True
-        else:
+        try:
+            with read_driver.session() as session:
+                session.run("CREATE (test:TestNode {name: 'security_check'})")
+                session.run("MATCH (test:TestNode {name: 'security_check'}) DELETE test")
+
             print("\n✗ Read-only permissions FAILED")
             print("  SECURITY VIOLATION: Read-only user can perform write operations!")
             print("  Please configure Neo4j to restrict write access for the RO user.\n")
             return False
+        except Exception:
+            print("\n✓ Read-only permissions PASSED")
+            print("  The read-only user is properly restricted from write operations.\n")
+            return True
+
     except Exception as e:
         print(f"\n✗ Read-only permissions test ERROR: {e}\n")
         return False

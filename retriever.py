@@ -88,7 +88,7 @@ class HybridRetriever:
         if k is None:
             k = config.vector_search_k
 
-        logger.info(f"Performing vector search for: {query[:50]}...")
+        logger.debug(f"Performing vector search for: {query[:50]}...")
 
         try:
             results = self.vectorstore.similarity_search(query, k=k)
@@ -178,7 +178,7 @@ class HybridRetriever:
         Returns:
             Graph context as string
         """
-        logger.info(f"Performing graph search for: {query[:50]}...")
+        logger.debug(f"Performing graph search for: {query[:50]}...")
 
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, self._graph_search_sync, query)
@@ -237,7 +237,7 @@ class HybridRetriever:
         Returns:
             Query response with answer and context
         """
-        logger.info(f"Processing query: {request.query[:50]}...")
+        logger.debug(f"Processing query: {request.query[:50]}...")
 
         async def _safe_vector_search() -> List[str]:
             if request.use_vector_search:
@@ -355,7 +355,7 @@ class HybridRetriever:
         Returns:
             List of matching entities
         """
-        logger.info(f"Searching entities matching: {name_pattern} (Async)")
+        logger.debug(f"Searching entities matching: {name_pattern} (Async)")
 
         try:
             driver = await get_async_read_graph()

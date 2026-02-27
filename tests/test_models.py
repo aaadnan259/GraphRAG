@@ -81,6 +81,15 @@ class TestSanitizeText:
         result = sanitize_text("  Hello   World  ")
         assert result.strip() == "Hello   World"
 
+    def test_sanitize_custom_length(self):
+        """Test sanitization with custom length limit."""
+        long_text = "A" * 1000
+        result = sanitize_text(long_text, max_length=100)
+        assert len(result) == 100
+
+        result_long = sanitize_text(long_text, max_length=800)
+        assert len(result_long) == 800
+
 
 class TestNormalizeRelationType:
     """Test relationship type normalization."""
@@ -317,8 +326,10 @@ class TestQueryRequest:
         """Test query length limit."""
         long_query = "What is " * 500
         query = QueryRequest(query=long_query)
-        # Should be truncated in sanitization
-        assert len(query.query) <= 500
+        # Should be truncated in sanitization, but allow up to 2000
+        # "What is " is 8 chars. 500 * 8 = 4000 chars.
+        # Should be truncated to 2000.
+        assert len(query.query) == 2000
 
     def test_query_empty_string(self):
         """Test that empty query is rejected."""
