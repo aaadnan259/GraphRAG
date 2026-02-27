@@ -99,3 +99,4 @@ def test_ingest_nested_invalid_extension():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Only .txt and .md files are supported"
+

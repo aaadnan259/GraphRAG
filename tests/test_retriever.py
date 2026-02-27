@@ -101,7 +101,7 @@ class TestCypherInjectionProtection:
         with patch('retriever.get_read_graph', return_value=mock_neo4j_driver), \
              patch('retriever.get_vectorstore', return_value=mock_vectorstore), \
              patch('retriever.ChatGoogleGenerativeAI'), \
-             patch('retriever.Neo4jGraph', return_value=mock_neo4j_graph):
+             patch('retriever.get_neo4j_graph', return_value=mock_neo4j_graph):
 
             retriever = HybridRetriever()
             yield retriever
@@ -196,6 +196,30 @@ class TestVectorSearch:
         with pytest.raises(Exception):
             await retriever._vector_search("test query")
 
+    @pytest.mark.asyncio
+    async def test_vector_search_retries(self, retriever, mock_vectorstore):
+        """Test that vector search retries on failure."""
+
+        # Setup the mock to fail first, then succeed
+        mock_doc = Mock()
+        mock_doc.page_content = "Success content"
+
+        # First call raises exception, second call returns list of docs
+        mock_vectorstore.similarity_search.side_effect = [
+            Exception("Temporary vector DB failure"),
+            [mock_doc]
+        ]
+
+        # Patch asyncio.sleep to avoid waiting during test
+        with patch('asyncio.sleep', new_callable=AsyncMock):
+            results = await retriever._vector_search("test query")
+
+        assert len(results) == 1
+        assert results[0] == "Success content"
+
+        # Verify it was called twice
+        assert mock_vectorstore.similarity_search.call_count == 2
+
 
 class TestGraphSearch:
     """Test graph search functionality."""
@@ -206,7 +230,7 @@ class TestGraphSearch:
         with patch('retriever.get_read_graph', return_value=mock_neo4j_driver), \
              patch('retriever.get_vectorstore', return_value=mock_vectorstore), \
              patch('retriever.ChatGoogleGenerativeAI'), \
-             patch('retriever.Neo4jGraph', return_value=mock_neo4j_graph):
+             patch('retriever.get_neo4j_graph', return_value=mock_neo4j_graph):
 
             retriever = HybridRetriever()
             yield retriever
