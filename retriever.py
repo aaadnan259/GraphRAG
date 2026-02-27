@@ -63,8 +63,6 @@ class HybridRetriever:
 
         self.synthesis_prompt = ChatPromptTemplate.from_template(SYNTHESIS_PROMPT)
 
-        self._neo4j_graph: Optional[Neo4jGraph] = None
-
     @property
     def read_driver(self):
         """Lazy load the read driver."""
@@ -74,9 +72,7 @@ class HybridRetriever:
 
     def _get_neo4j_graph(self) -> Neo4jGraph:
         """Get or create Neo4j graph wrapper with READ-ONLY credentials."""
-        if self._neo4j_graph is None:
-            self._neo4j_graph = get_neo4j_graph()
-        return self._neo4j_graph
+        return get_neo4j_graph()
 
     def _vector_search_sync(self, query: str, k: int = None) -> List[str]:
         """

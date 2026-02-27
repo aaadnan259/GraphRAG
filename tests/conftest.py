@@ -12,6 +12,7 @@ os.environ.setdefault("NEO4J_RW_USER", "dummy")
 os.environ.setdefault("NEO4J_RW_PASSWORD", "dummy")
 os.environ.setdefault("NEO4J_RO_USER", "dummy")
 os.environ.setdefault("NEO4J_RO_PASSWORD", "dummy")
+os.environ.setdefault("RETRY_MIN_WAIT", "0")
 
 import pytest
 from unittest.mock import Mock, MagicMock, AsyncMock, patch
