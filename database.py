@@ -4,8 +4,8 @@ Neo4j and ChromaDB connection management.
 
 import logging
 from typing import Optional
-from neo4j import GraphDatabase, Driver, AsyncGraphDatabase, AsyncDriver
 from langchain_chroma import Chroma
+from neo4j import GraphDatabase, Driver, AsyncGraphDatabase, AsyncDriver
 from langchain_community.graphs import Neo4jGraph
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from config import config
