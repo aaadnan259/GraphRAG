@@ -11,10 +11,10 @@ import json
 from typing import List, Dict, Any, Optional, Union, AsyncIterator
 from datetime import datetime
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.schema import Document
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.documents import Document
 from tenacity import (
     retry,
     stop_after_attempt,

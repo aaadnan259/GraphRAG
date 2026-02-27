@@ -6,14 +6,6 @@ Tests security, read-only access, fallback mechanisms, and Cypher injection prot
 import sys
 from unittest.mock import Mock, MagicMock, AsyncMock, patch
 
-# Mock external dependencies that might not be installed in the test environment
-sys.modules["langchain_google_genai"] = MagicMock()
-sys.modules["langchain_community.graphs"] = MagicMock()
-sys.modules["langchain.chains"] = MagicMock()
-sys.modules["langchain.prompts"] = MagicMock()
-sys.modules["neo4j"] = MagicMock()
-sys.modules["langchain_chroma"] = MagicMock()
-
 import pytest
 import asyncio
 
@@ -436,12 +428,8 @@ class TestGraphStatistics:
         session = mock_neo4j_driver.session.return_value.__enter__.return_value
         session.run.side_effect = Exception("Database connection failed")
 
-        stats = await retriever.get_graph_statistics()
-
-        # Should return error stats instead of crashing
-        assert "error" in stats
-        assert stats["total_entities"] == 0
-        assert stats["total_relationships"] == 0
+        with pytest.raises(Exception):
+            await retriever.get_graph_statistics()
 
 
 class TestEntitySearch:

@@ -157,6 +157,17 @@ def test_get_graph_stats_failure():
     finally:
         app.dependency_overrides = {}
 
+@patch("api.HybridRetriever")
+def test_get_graph_stats_failure(mock_hybrid_retriever):
+    """Test graph statistics failure handling."""
+    mock_instance = mock_hybrid_retriever.return_value
+    mock_instance.get_graph_statistics = AsyncMock(side_effect=Exception("Database error"))
+
+    response = client.get("/stats")
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "An internal server error occurred while fetching graph statistics."
+
 def test_search_entities_success():
     """Test successful entity search."""
     mock_entities = [
