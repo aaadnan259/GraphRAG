@@ -77,7 +77,6 @@ async def benchmark_api_memory():
             return {"success": True, "processed_len": total_len}
 
         instance.ingest.side_effect = mock_ingest
-        instance.init_schema = MagicMock()
 
         print(f"Starting benchmark with {file_size/1024/1024:.2f}MB file...")
 

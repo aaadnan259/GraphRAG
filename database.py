@@ -4,8 +4,9 @@ Neo4j and ChromaDB connection management.
 
 import logging
 from typing import Optional
-from neo4j import GraphDatabase, Driver, AsyncGraphDatabase, AsyncDriver
 from langchain_chroma import Chroma
+from neo4j import GraphDatabase, Driver, AsyncGraphDatabase, AsyncDriver
+from langchain_community.graphs import Neo4jGraph
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from config import config
 
@@ -121,6 +122,31 @@ class AsyncNeo4jConnectionManager:
             logger.info("Neo4j Async READ driver closed")
 
 
+class Neo4jGraphManager:
+    """Singleton manager for LangChain Neo4jGraph wrapper."""
+
+    _instance: Optional[Neo4jGraph] = None
+
+    @classmethod
+    def get_graph(cls) -> Neo4jGraph:
+        """Get or create the Neo4jGraph singleton."""
+        if cls._instance is None:
+            logger.info("Initializing Neo4jGraph wrapper with READ-ONLY credentials")
+            cls._instance = Neo4jGraph(
+                url=config.neo4j_uri,
+                username=config.neo4j_ro_user,
+                password=config.neo4j_ro_password,
+            )
+        return cls._instance
+
+    @classmethod
+    def close(cls) -> None:
+        """Close the graph connection (if possible)."""
+        # Neo4jGraph doesn't expose a public close method, but relies on driver.
+        # Since we don't own the driver, we let it be collected or handled by the process.
+        cls._instance = None
+
+
 class ChromaDBManager:
     """Singleton manager for ChromaDB vector store."""
 
@@ -164,6 +190,14 @@ def get_write_graph() -> Driver:
     return Neo4jConnectionManager.get_write_driver()
 
 
+def get_neo4j_graph() -> Neo4jGraph:
+    """
+    Get Neo4jGraph wrapper for LangChain operations.
+    Uses READ-ONLY credentials.
+    """
+    return Neo4jGraphManager.get_graph()
+
+
 def get_read_graph() -> Driver:
     """
     Get Neo4j driver with READ-ONLY privileges for retrieval.
@@ -179,6 +213,18 @@ async def get_async_read_graph() -> AsyncDriver:
     This connection uses NEO4J_RO_USER credentials.
     """
     return await AsyncNeo4jConnectionManager.get_read_driver()
+
+
+def get_neo4j_graph() -> Neo4jGraph:
+    """
+    Get or create Neo4j graph wrapper for LangChain with READ-ONLY credentials.
+    """
+    logger.info("Initializing Neo4j graph wrapper with READ-ONLY credentials")
+    return Neo4jGraph(
+        url=config.neo4j_uri,
+        username=config.neo4j_ro_user,
+        password=config.neo4j_ro_password,
+    )
 
 
 def get_vectorstore() -> Chroma:
@@ -217,22 +263,6 @@ def initialize_neo4j_schema(driver: Driver) -> None:
     logger.info("Neo4j schema initialization complete")
 
 
-def verify_read_only_permissions(driver: Driver) -> bool:
-    """
-    Verify that the read-only user cannot perform write operations.
-    Returns True if properly restricted, False otherwise.
-    """
-    logger.info("Verifying read-only permissions...")
-
-    with driver.session() as session:
-        try:
-            session.run("CREATE (test:TestNode {name: 'security_check'})")
-            session.run("MATCH (test:TestNode {name: 'security_check'}) DELETE test")
-            logger.error("SECURITY VIOLATION: Read-only user can perform write operations!")
-            return False
-        except Exception as e:
-            logger.info(f"Read-only verification passed: {e}")
-            return True
 
 async def close_all_async_connections() -> None:
     """Close all async database connections."""

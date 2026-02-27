@@ -19,7 +19,7 @@ from tenacity import (
 
 from config import config
 from models import QueryRequest, QueryResponse
-from database import get_read_graph, get_vectorstore, get_async_read_graph
+from database import get_read_graph, get_vectorstore, get_async_read_graph, get_neo4j_graph
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -63,8 +63,6 @@ class HybridRetriever:
 
         self.synthesis_prompt = ChatPromptTemplate.from_template(SYNTHESIS_PROMPT)
 
-        self._neo4j_graph: Optional[Neo4jGraph] = None
-
     @property
     def read_driver(self):
         """Lazy load the read driver."""
@@ -74,14 +72,7 @@ class HybridRetriever:
 
     def _get_neo4j_graph(self) -> Neo4jGraph:
         """Get or create Neo4j graph wrapper with READ-ONLY credentials."""
-        if self._neo4j_graph is None:
-            logger.info("Initializing Neo4j graph with READ-ONLY credentials")
-            self._neo4j_graph = Neo4jGraph(
-                url=config.neo4j_uri,
-                username=config.neo4j_ro_user,
-                password=config.neo4j_ro_password,
-            )
-        return self._neo4j_graph
+        return get_neo4j_graph()
 
     def _vector_search_sync(self, query: str, k: int = None) -> List[str]:
         """
@@ -97,7 +88,7 @@ class HybridRetriever:
         if k is None:
             k = config.vector_search_k
 
-        logger.info(f"Performing vector search for: {query[:50]}...")
+        logger.debug(f"Performing vector search for: {query[:50]}...")
 
         try:
             results = self.vectorstore.similarity_search(query, k=k)
@@ -187,7 +178,7 @@ class HybridRetriever:
         Returns:
             Graph context as string
         """
-        logger.info(f"Performing graph search for: {query[:50]}...")
+        logger.debug(f"Performing graph search for: {query[:50]}...")
 
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, self._graph_search_sync, query)
@@ -246,7 +237,7 @@ class HybridRetriever:
         Returns:
             Query response with answer and context
         """
-        logger.info(f"Processing query: {request.query[:50]}...")
+        logger.debug(f"Processing query: {request.query[:50]}...")
 
         async def _safe_vector_search() -> List[str]:
             if request.use_vector_search:
@@ -364,7 +355,7 @@ class HybridRetriever:
         Returns:
             List of matching entities
         """
-        logger.info(f"Searching entities matching: {name_pattern} (Async)")
+        logger.debug(f"Searching entities matching: {name_pattern} (Async)")
 
         try:
             driver = await get_async_read_graph()

@@ -12,6 +12,7 @@ os.environ.setdefault("NEO4J_RW_USER", "dummy")
 os.environ.setdefault("NEO4J_RW_PASSWORD", "dummy")
 os.environ.setdefault("NEO4J_RO_USER", "dummy")
 os.environ.setdefault("NEO4J_RO_PASSWORD", "dummy")
+os.environ.setdefault("RETRY_MIN_WAIT", "0")
 
 import pytest
 from unittest.mock import Mock, MagicMock, AsyncMock, patch
@@ -174,7 +175,6 @@ def edge_case_texts():
 def mock_config():
     """Mock configuration to avoid loading .env file."""
     with patch('config.config') as mock_cfg:
-        mock_cfg.openai_api_key = "test-key"
         mock_cfg.neo4j_uri = "bolt://localhost:7687"
         mock_cfg.neo4j_rw_user = "neo4j"
         mock_cfg.neo4j_rw_password = "password"
